@@ -6,6 +6,7 @@ with its own manifest, dependencies, checks, and installation.
 | Plugin | Purpose |
 | --- | --- |
 | [jev-evaluator](plugins/jev-evaluator/README.md) | Expose Jev evaluations as an MCP tool for Codex and Claude agents. |
+| [watchtower-board](plugins/watchtower-board/README.md) | Browse read-only Watchtower tasks and attach task briefs in the composer. |
 
 ## Install a plugin
 
