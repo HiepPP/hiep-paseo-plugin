@@ -19,9 +19,9 @@ How:
 
 Files:
 
-- [Client entry](../../plugins/watchtower-board/index.client.tsx): Set the panel location and command target.
-- [Board](../../plugins/watchtower-board/client/board.tsx): Show project identity.
-- [README](../../plugins/watchtower-board/README.md): Explain where to open the board.
+- [Client entry](../../../../plugins/watchtower-board/index.client.tsx): Set the panel location and command target.
+- [Board](../../../../plugins/watchtower-board/client/board.tsx): Show project identity.
+- [README](../../../../plugins/watchtower-board/README.md): Explain where to open the board.
 
 Expected result:
 

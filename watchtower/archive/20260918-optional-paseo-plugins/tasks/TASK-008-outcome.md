@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Status: BLOCKED
+Status: DONE
 
 Changed:
 - Restricted the Watchtower panel to the Explorer location.
@@ -22,12 +22,12 @@ Verified:
 - Source inspection confirmed the existing workspace data boundary.
 - The user manually confirmed Explorer placement and correct data when switching projects.
 
-Blocked:
-- Native UI verification failed before connecting to the app: Sky Computer Use native pipe startup failed.
-- Reconnecting and resetting the UI tool session did not resolve the startup failure.
-- Only closing the obsolete center tab remains unverified.
+- On 2026-09-20, native UI inspection found no obsolete Watchtower center tab in either project workspace: `wks_43b925b9485acc55` and `wks_6f12ecc578f25a6d`. No close action was needed.
+- Final native UI inspection through `cua.getApp("sh.paseo.desktop")` confirmed the original `Determine next steps` workspace (`wks_6f12ecc578f25a6d`) restored, with only `what next` in the center and Watchtower beside Files and Changes in Explorer. The board header showed `hiep-paseo-plugin`.
+- This follow-up changed only plan records; earlier code, test, reload, and user-confirmed project-switching evidence above was retained.
+
+Resolved blocker:
+- Earlier native UI startup and popover-only observations prevented final cleanup verification. The final app binding returned the full window and confirmed the required state.
 
 Handoff:
-- Open Command Center and choose Open Watchtower board in the intended workspace.
-- Explorer placement and project switching are confirmed by the user.
-- Close any old Watchtower center tab. Mark DONE only after the UI checks pass.
+- None.

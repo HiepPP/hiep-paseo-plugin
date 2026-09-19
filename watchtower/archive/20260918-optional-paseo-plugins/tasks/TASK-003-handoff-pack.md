@@ -22,18 +22,18 @@ How:
 
 Files:
 
-- [paseo-plugin.json](../../plugins/handoff-pack/paseo-plugin.json): Declare the plugin ID and verified host requirements.
-- [package.json](../../plugins/handoff-pack/package.json): Declare dependencies and validation scripts.
-- [package-lock.json](../../plugins/handoff-pack/package-lock.json): Lock dependencies.
-- [tsconfig.json](../../plugins/handoff-pack/tsconfig.json): Configure TypeScript checks.
-- [index.server.ts](../../plugins/handoff-pack/index.server.ts): Register server contributions and cleanup.
-- [index.client.tsx](../../plugins/handoff-pack/index.client.tsx): Register the action or workspace panel.
-- [server/](../../plugins/handoff-pack/server/): Keep checks, local data, and service access on the server.
-- [client/](../../plugins/handoff-pack/client/): Render the action and its results.
-- [shared/](../../plugins/handoff-pack/shared/): Define runtime-neutral RPC contracts.
-- [tests/](../../plugins/handoff-pack/tests/): Cover observable success and failure cases.
-- [README.md](../../plugins/handoff-pack/README.md): Document configuration, permissions, limitations, and checks.
-- [Root README](../../README.md): Add the plugin to the catalog.
+- [paseo-plugin.json](../../../../plugins/handoff-pack/paseo-plugin.json): Declare the plugin ID and verified host requirements.
+- [package.json](../../../../plugins/handoff-pack/package.json): Declare dependencies and validation scripts.
+- [package-lock.json](../../../../plugins/handoff-pack/package-lock.json): Lock dependencies.
+- [tsconfig.json](../../../../plugins/handoff-pack/tsconfig.json): Configure TypeScript checks.
+- [index.server.ts](../../../../plugins/handoff-pack/index.server.ts): Register server contributions and cleanup.
+- [index.client.tsx](../../../../plugins/handoff-pack/index.client.tsx): Register the action or workspace panel.
+- [server/](../../../../plugins/handoff-pack/server): Keep checks, local data, and service access on the server.
+- [client/](../../../../plugins/handoff-pack/client): Render the action and its results.
+- [shared/](../../../../plugins/handoff-pack/shared): Define runtime-neutral RPC contracts.
+- [tests/](../../../../plugins/handoff-pack/tests): Cover observable success and failure cases.
+- [README.md](../../../../plugins/handoff-pack/README.md): Document configuration, permissions, limitations, and checks.
+- [Root README](../../../../README.md): Add the plugin to the catalog.
 
 Expected result:
 

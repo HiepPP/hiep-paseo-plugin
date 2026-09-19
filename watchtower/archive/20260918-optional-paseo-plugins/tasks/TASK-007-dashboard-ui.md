@@ -11,7 +11,7 @@ Change: Replace large task cards with a compact summary and grouped task rows.
 
 How:
 
-- Follow the [reference image](../../../watchtower/media/watchtower-dashboard.png) from the local Watchtower extension.
+- Follow the [reference image](../../../../../watchtower/media/watchtower-dashboard.png) from the local Watchtower extension.
 - Show a compact plan header, refresh action, completion progress, and status counts.
 - Group tasks by Active, Blocked, Todo, and Done with clear status badges.
 - Show the selected brief, dependencies, errors, and full blockers through task details.
@@ -22,10 +22,10 @@ How:
 
 Files:
 
-- [Client](../../plugins/watchtower-board/client/): Render the dashboard and task details.
-- [Attachment handler](../../plugins/watchtower-board/server/handlers.ts): Keep scoped results visible in the native picker.
-- [Tests](../../plugins/watchtower-board/tests/): Check progress and grouping behavior where applicable.
-- [Plugin README](../../plugins/watchtower-board/README.md): Explain the updated interface.
+- [Client](../../../../plugins/watchtower-board/client): Render the dashboard and task details.
+- [Attachment handler](../../../../plugins/watchtower-board/server/handlers.ts): Keep scoped results visible in the native picker.
+- [Tests](../../../../plugins/watchtower-board/tests): Check progress and grouping behavior where applicable.
+- [Plugin README](../../../../plugins/watchtower-board/README.md): Explain the updated interface.
 
 Expected result:
 

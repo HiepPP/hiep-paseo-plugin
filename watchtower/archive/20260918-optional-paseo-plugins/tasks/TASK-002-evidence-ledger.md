@@ -23,18 +23,18 @@ How:
 
 Files:
 
-- [paseo-plugin.json](../../plugins/evidence-ledger/paseo-plugin.json): Declare the plugin ID and verified host requirements.
-- [package.json](../../plugins/evidence-ledger/package.json): Declare dependencies and validation scripts.
-- [package-lock.json](../../plugins/evidence-ledger/package-lock.json): Lock dependencies.
-- [tsconfig.json](../../plugins/evidence-ledger/tsconfig.json): Configure TypeScript checks.
-- [index.server.ts](../../plugins/evidence-ledger/index.server.ts): Register server contributions and cleanup.
-- [index.client.tsx](../../plugins/evidence-ledger/index.client.tsx): Register the action or workspace panel.
-- [server/](../../plugins/evidence-ledger/server/): Keep checks, local data, and service access on the server.
-- [client/](../../plugins/evidence-ledger/client/): Render the action and its results.
-- [shared/](../../plugins/evidence-ledger/shared/): Define runtime-neutral RPC contracts.
-- [tests/](../../plugins/evidence-ledger/tests/): Cover observable success and failure cases.
-- [README.md](../../plugins/evidence-ledger/README.md): Document configuration, permissions, limitations, and checks.
-- [Root README](../../README.md): Add the plugin to the catalog.
+- [paseo-plugin.json](../../../../plugins/evidence-ledger/paseo-plugin.json): Declare the plugin ID and verified host requirements.
+- [package.json](../../../../plugins/evidence-ledger/package.json): Declare dependencies and validation scripts.
+- [package-lock.json](../../../../plugins/evidence-ledger/package-lock.json): Lock dependencies.
+- [tsconfig.json](../../../../plugins/evidence-ledger/tsconfig.json): Configure TypeScript checks.
+- [index.server.ts](../../../../plugins/evidence-ledger/index.server.ts): Register server contributions and cleanup.
+- [index.client.tsx](../../../../plugins/evidence-ledger/index.client.tsx): Register the action or workspace panel.
+- [server/](../../../../plugins/evidence-ledger/server): Keep checks, local data, and service access on the server.
+- [client/](../../../../plugins/evidence-ledger/client): Render the action and its results.
+- [shared/](../../../../plugins/evidence-ledger/shared): Define runtime-neutral RPC contracts.
+- [tests/](../../../../plugins/evidence-ledger/tests): Cover observable success and failure cases.
+- [README.md](../../../../plugins/evidence-ledger/README.md): Document configuration, permissions, limitations, and checks.
+- [Root README](../../../../README.md): Add the plugin to the catalog.
 
 Expected result:
 

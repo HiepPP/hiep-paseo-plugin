@@ -22,18 +22,18 @@ How:
 
 Files:
 
-- [paseo-plugin.json](../../plugins/preview-launcher/paseo-plugin.json): Declare the plugin ID and verified host requirements.
-- [package.json](../../plugins/preview-launcher/package.json): Declare dependencies and validation scripts.
-- [package-lock.json](../../plugins/preview-launcher/package-lock.json): Lock dependencies.
-- [tsconfig.json](../../plugins/preview-launcher/tsconfig.json): Configure TypeScript checks.
-- [index.server.ts](../../plugins/preview-launcher/index.server.ts): Register server contributions and cleanup.
-- [index.client.tsx](../../plugins/preview-launcher/index.client.tsx): Register the action or workspace panel.
-- [server/](../../plugins/preview-launcher/server/): Keep checks, local data, and service access on the server.
-- [client/](../../plugins/preview-launcher/client/): Render the action and its results.
-- [shared/](../../plugins/preview-launcher/shared/): Define runtime-neutral RPC contracts.
-- [tests/](../../plugins/preview-launcher/tests/): Cover observable success and failure cases.
-- [README.md](../../plugins/preview-launcher/README.md): Document configuration, permissions, limitations, and checks.
-- [Root README](../../README.md): Add the plugin to the catalog.
+- [paseo-plugin.json](../../../../plugins/preview-launcher/paseo-plugin.json): Declare the plugin ID and verified host requirements.
+- [package.json](../../../../plugins/preview-launcher/package.json): Declare dependencies and validation scripts.
+- [package-lock.json](../../../../plugins/preview-launcher/package-lock.json): Lock dependencies.
+- [tsconfig.json](../../../../plugins/preview-launcher/tsconfig.json): Configure TypeScript checks.
+- [index.server.ts](../../../../plugins/preview-launcher/index.server.ts): Register server contributions and cleanup.
+- [index.client.tsx](../../../../plugins/preview-launcher/index.client.tsx): Register the action or workspace panel.
+- [server/](../../../../plugins/preview-launcher/server): Keep checks, local data, and service access on the server.
+- [client/](../../../../plugins/preview-launcher/client): Render the action and its results.
+- [shared/](../../../../plugins/preview-launcher/shared): Define runtime-neutral RPC contracts.
+- [tests/](../../../../plugins/preview-launcher/tests): Cover observable success and failure cases.
+- [README.md](../../../../plugins/preview-launcher/README.md): Document configuration, permissions, limitations, and checks.
+- [Root README](../../../../README.md): Add the plugin to the catalog.
 
 Expected result:
 

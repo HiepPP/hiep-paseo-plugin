@@ -21,18 +21,18 @@ How:
 
 Files:
 
-- [paseo-plugin.json](../../plugins/workspace-preflight/paseo-plugin.json): Declare the plugin ID and verified host requirements.
-- [package.json](../../plugins/workspace-preflight/package.json): Declare dependencies and validation scripts.
-- [package-lock.json](../../plugins/workspace-preflight/package-lock.json): Lock dependencies.
-- [tsconfig.json](../../plugins/workspace-preflight/tsconfig.json): Configure TypeScript checks.
-- [index.server.ts](../../plugins/workspace-preflight/index.server.ts): Register server contributions and cleanup.
-- [index.client.tsx](../../plugins/workspace-preflight/index.client.tsx): Register the action or workspace panel.
-- [server/](../../plugins/workspace-preflight/server/): Keep checks, local data, and service access on the server.
-- [client/](../../plugins/workspace-preflight/client/): Render the action and its results.
-- [shared/](../../plugins/workspace-preflight/shared/): Define runtime-neutral RPC contracts.
-- [tests/](../../plugins/workspace-preflight/tests/): Cover observable success and failure cases.
-- [README.md](../../plugins/workspace-preflight/README.md): Document configuration, permissions, limitations, and checks.
-- [Root README](../../README.md): Add the plugin to the catalog.
+- [paseo-plugin.json](../../../../plugins/workspace-preflight/paseo-plugin.json): Declare the plugin ID and verified host requirements.
+- [package.json](../../../../plugins/workspace-preflight/package.json): Declare dependencies and validation scripts.
+- [package-lock.json](../../../../plugins/workspace-preflight/package-lock.json): Lock dependencies.
+- [tsconfig.json](../../../../plugins/workspace-preflight/tsconfig.json): Configure TypeScript checks.
+- [index.server.ts](../../../../plugins/workspace-preflight/index.server.ts): Register server contributions and cleanup.
+- [index.client.tsx](../../../../plugins/workspace-preflight/index.client.tsx): Register the action or workspace panel.
+- [server/](../../../../plugins/workspace-preflight/server): Keep checks, local data, and service access on the server.
+- [client/](../../../../plugins/workspace-preflight/client): Render the action and its results.
+- [shared/](../../../../plugins/workspace-preflight/shared): Define runtime-neutral RPC contracts.
+- [tests/](../../../../plugins/workspace-preflight/tests): Cover observable success and failure cases.
+- [README.md](../../../../plugins/workspace-preflight/README.md): Document configuration, permissions, limitations, and checks.
+- [Root README](../../../../README.md): Add the plugin to the catalog.
 
 Expected result:
 

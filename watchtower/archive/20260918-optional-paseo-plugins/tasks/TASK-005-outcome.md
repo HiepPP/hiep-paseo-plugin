@@ -5,7 +5,7 @@
 Status: DONE
 
 Changed:
-- Added the [Watchtower board plugin](../../plugins/watchtower-board/README.md) and its root catalog entry.
+- Added the [Watchtower board plugin](../../../../plugins/watchtower-board/README.md) and its root catalog entry.
 - Added a read-only workspace panel, refresh action, task brief view, and native composer attachment source.
 - Installed and reloaded the plugin on the local Paseo 0.8.0 host, `srv_0SBGwwyUBqsT`.
 

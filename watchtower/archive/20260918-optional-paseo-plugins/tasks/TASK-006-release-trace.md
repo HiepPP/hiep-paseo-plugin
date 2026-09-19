@@ -22,18 +22,18 @@ How:
 
 Files:
 
-- [paseo-plugin.json](../../plugins/release-trace/paseo-plugin.json): Declare the plugin ID and verified host requirements.
-- [package.json](../../plugins/release-trace/package.json): Declare dependencies and validation scripts.
-- [package-lock.json](../../plugins/release-trace/package-lock.json): Lock dependencies.
-- [tsconfig.json](../../plugins/release-trace/tsconfig.json): Configure TypeScript checks.
-- [index.server.ts](../../plugins/release-trace/index.server.ts): Register server contributions and cleanup.
-- [index.client.tsx](../../plugins/release-trace/index.client.tsx): Register the action or workspace panel.
-- [server/](../../plugins/release-trace/server/): Keep checks, local data, and service access on the server.
-- [client/](../../plugins/release-trace/client/): Render the action and its results.
-- [shared/](../../plugins/release-trace/shared/): Define runtime-neutral RPC contracts.
-- [tests/](../../plugins/release-trace/tests/): Cover observable success and failure cases.
-- [README.md](../../plugins/release-trace/README.md): Document configuration, permissions, limitations, and checks.
-- [Root README](../../README.md): Add the plugin to the catalog.
+- [paseo-plugin.json](../../../../plugins/release-trace/paseo-plugin.json): Declare the plugin ID and verified host requirements.
+- [package.json](../../../../plugins/release-trace/package.json): Declare dependencies and validation scripts.
+- [package-lock.json](../../../../plugins/release-trace/package-lock.json): Lock dependencies.
+- [tsconfig.json](../../../../plugins/release-trace/tsconfig.json): Configure TypeScript checks.
+- [index.server.ts](../../../../plugins/release-trace/index.server.ts): Register server contributions and cleanup.
+- [index.client.tsx](../../../../plugins/release-trace/index.client.tsx): Register the action or workspace panel.
+- [server/](../../../../plugins/release-trace/server): Keep checks, local data, and service access on the server.
+- [client/](../../../../plugins/release-trace/client): Render the action and its results.
+- [shared/](../../../../plugins/release-trace/shared): Define runtime-neutral RPC contracts.
+- [tests/](../../../../plugins/release-trace/tests): Cover observable success and failure cases.
+- [README.md](../../../../plugins/release-trace/README.md): Document configuration, permissions, limitations, and checks.
+- [Root README](../../../../README.md): Add the plugin to the catalog.
 
 Expected result:
 

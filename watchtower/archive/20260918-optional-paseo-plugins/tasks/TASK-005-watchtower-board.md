@@ -22,18 +22,18 @@ How:
 
 Files:
 
-- [paseo-plugin.json](../../plugins/watchtower-board/paseo-plugin.json): Declare the plugin ID and verified host requirements.
-- [package.json](../../plugins/watchtower-board/package.json): Declare dependencies and validation scripts.
-- [package-lock.json](../../plugins/watchtower-board/package-lock.json): Lock dependencies.
-- [tsconfig.json](../../plugins/watchtower-board/tsconfig.json): Configure TypeScript checks.
-- [index.server.ts](../../plugins/watchtower-board/index.server.ts): Register server contributions and cleanup.
-- [index.client.tsx](../../plugins/watchtower-board/index.client.tsx): Register the action or workspace panel.
-- [server/](../../plugins/watchtower-board/server/): Keep checks, local data, and service access on the server.
-- [client/](../../plugins/watchtower-board/client/): Render the action and its results.
-- [shared/](../../plugins/watchtower-board/shared/): Define runtime-neutral RPC contracts.
-- [tests/](../../plugins/watchtower-board/tests/): Cover observable success and failure cases.
-- [README.md](../../plugins/watchtower-board/README.md): Document configuration, permissions, limitations, and checks.
-- [Root README](../../README.md): Add the plugin to the catalog.
+- [paseo-plugin.json](../../../../plugins/watchtower-board/paseo-plugin.json): Declare the plugin ID and verified host requirements.
+- [package.json](../../../../plugins/watchtower-board/package.json): Declare dependencies and validation scripts.
+- [package-lock.json](../../../../plugins/watchtower-board/package-lock.json): Lock dependencies.
+- [tsconfig.json](../../../../plugins/watchtower-board/tsconfig.json): Configure TypeScript checks.
+- [index.server.ts](../../../../plugins/watchtower-board/index.server.ts): Register server contributions and cleanup.
+- [index.client.tsx](../../../../plugins/watchtower-board/index.client.tsx): Register the action or workspace panel.
+- [server/](../../../../plugins/watchtower-board/server): Keep checks, local data, and service access on the server.
+- [client/](../../../../plugins/watchtower-board/client): Render the action and its results.
+- [shared/](../../../../plugins/watchtower-board/shared): Define runtime-neutral RPC contracts.
+- [tests/](../../../../plugins/watchtower-board/tests): Cover observable success and failure cases.
+- [README.md](../../../../plugins/watchtower-board/README.md): Document configuration, permissions, limitations, and checks.
+- [Root README](../../../../README.md): Add the plugin to the catalog.
 
 Expected result:
 
