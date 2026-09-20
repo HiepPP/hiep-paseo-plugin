@@ -12,9 +12,10 @@ import {
 import { addSpace, moveProject, projectKey, removeSpace, stateSchema } from "../shared/spaces";
 
 const fixture = `<html><head></head><body><aside><section><div data-testid="sidebar-project-workspace-list-scroll"><div role="group" id="p"><button data-testid="sidebar-project-row-repo:p">P</button><span>Existing agent</span></div><div role="group" id="q"><button data-testid="sidebar-project-row-repo:q">Q</button></div><div role="group" id="unknown"><button data-testid="sidebar-project-row-other">Other host</button></div></div></section></aside><main>Chat</main><div role="menu"><div data-testid="sidebar-project-menu-open-settings-repo:p">Settings</div></div></body></html>`;
-function setup(html = fixture, moveSucceeded = true) {
+function setup(html = fixture, moveSucceeded = true, thirdSpace = false) {
   const { document, window } = parseHTML(html);
   let state = addSpace(stateSchema.parse({}));
+  if (thirdSpace) state = addSpace(state);
   state = moveProject(state, projectKey("sidebar", "p"), "space-2");
   let snapshot: SidebarSnapshot = {
     state,
@@ -206,5 +207,67 @@ test("project menu dismisses only after a successful move", async () => {
     } finally {
       f.cleanup();
     }
+  }
+});
+
+test("Space transition slides out then in and cancels on cleanup", async () => {
+  const f = setup();
+  const animations: { frames: { transform: string }[]; finish: () => void; canceled: boolean }[] =
+    [];
+  const node = f.document.querySelector('[data-testid="sidebar-project-workspace-list-scroll"]')!;
+  Object.assign(node, {
+    animate(frames: { transform: string }[]) {
+      let finish = () => {};
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const item = { frames, finish, canceled: false };
+      animations.push(item);
+      return {
+        finished,
+        cancel() {
+          item.canceled = true;
+        },
+      };
+    },
+  });
+  try {
+    f.document.querySelector('[aria-label="Workspace 2"]')!.click();
+    assert.equal(animations[0].frames[1].transform, "translateX(-100%)");
+    assert.equal(f.document.querySelector("#p")!.hasAttribute("data-paseo-space-hidden"), true);
+    animations[0].finish();
+    await Promise.resolve();
+    assert.equal(f.document.querySelector("#p")!.hasAttribute("data-paseo-space-hidden"), false);
+    assert.equal(animations[1].frames[0].transform, "translateX(100%)");
+  } finally {
+    f.cleanup();
+  }
+  assert.equal(
+    animations.every((item) => item.canceled),
+    true,
+  );
+});
+
+test("swipe on the stationary sidebar reaches empty Space 3 from Space 2", () => {
+  const f = setup(fixture, true, true);
+  try {
+    f.document.querySelector('[aria-label="Workspace 2"]')!.click();
+    const wheel = new f.window.Event("wheel", { bubbles: true, cancelable: true });
+    Object.assign(wheel, { deltaX: 90, deltaY: 0, deltaMode: 0, buttons: 0 });
+    f.document.querySelector("section")!.dispatchEvent(wheel);
+    assert.equal(
+      f.document.querySelector('[aria-label="Workspace 3"]')!.getAttribute("aria-selected"),
+      "true",
+    );
+    assert.equal(wheel.defaultPrevented, true);
+    const reverse = new f.window.Event("wheel", { bubbles: true, cancelable: true });
+    Object.assign(reverse, { deltaX: -28, deltaY: 0, deltaMode: 0, buttons: 0 });
+    f.document.querySelector("section")!.dispatchEvent(reverse);
+    assert.equal(
+      f.document.querySelector('[aria-label="Workspace 2"]')!.getAttribute("aria-selected"),
+      "true",
+    );
+  } finally {
+    f.cleanup();
   }
 });

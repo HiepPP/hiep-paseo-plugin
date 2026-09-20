@@ -34,7 +34,9 @@ Native keyboard shortcuts, search, and history retain their normal global behavi
 
 A MutationObserver restores controls when the sidebar rerenders. Disabling removes the observer,
 timer, wheel listener, injected menus, styles, visibility attributes, and footer controls.
-No animations are added. Real trackpad hardware remains a manual acceptance check.
+Switching Spaces slides the project list out and the destination list in over 170 ms, following the direction
+of travel. The numbered controls stay fixed. Reduced-motion preferences skip the animation.
+Disabling cancels any active animation. Real trackpad hardware remains a manual acceptance check.
 
 ## Checks and installation
 

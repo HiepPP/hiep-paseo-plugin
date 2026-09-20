@@ -31,7 +31,15 @@ import { matchProject, sidebarMembership, viewMembership } from "./sidebar-state
 import { adjacent, removalTarget } from "../shared/spaces";
 
 // Desktop-only DOM adapter. No DOM globals leak into the native client bundle.
+interface SlideAnimation {
+  finished: Promise<unknown>;
+  cancel(): void;
+}
 export interface DomNode {
+  animate?(
+    frames: { transform: string; opacity: number }[],
+    options: { duration: number; easing: string; fill: string },
+  ): SlideAnimation;
   dispatchEvent(event: DomEvent): boolean;
   textContent: string | null;
   parentElement: DomNode | null;
@@ -60,6 +68,7 @@ interface DomEvent {
   preventDefault(): void;
 }
 export interface DomDocument extends DomNode {
+  defaultView?: { matchMedia?(query: string): { matches: boolean } };
   createEvent(
     type: string,
   ): DomEvent & { initEvent(type: string, bubbles: boolean, cancelable: boolean): void };
@@ -146,11 +155,64 @@ export function mountSidebar(
     parent.appendChild(b);
     return b;
   }
+  let slide: SlideAnimation | undefined;
+  let slideVersion = 0;
+  let pendingSpace: string | null = null;
+  function cancelSlide() {
+    slideVersion++;
+    slide?.cancel();
+    slide = undefined;
+    pendingSpace = null;
+  }
   function select(id: string) {
     closeActions();
-    active = id;
-    signature = "";
-    render();
+    const spaces = controller.get()?.state.spaces ?? [];
+    cancelSlide();
+    if (id === active || !spaces.some((space) => space.id === id)) return;
+    const direction =
+      spaces.findIndex((space) => space.id === id) >
+      spaces.findIndex((space) => space.id === active)
+        ? 1
+        : -1;
+    const node = scroll;
+    const apply = () => {
+      active = id;
+      signature = "";
+      render();
+    };
+    if (
+      !node?.animate ||
+      doc.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) {
+      apply();
+      return;
+    }
+    pendingSpace = id;
+    const version = slideVersion;
+    slide = node.animate(
+      [
+        { transform: "translateX(0)", opacity: 1 },
+        { transform: `translateX(${-direction * 100}%)`, opacity: 0 },
+      ],
+      { duration: 65, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" },
+    );
+    void slide.finished
+      .then(() => {
+        if (stopped || version !== slideVersion) return;
+        slide?.cancel();
+        pendingSpace = null;
+        apply();
+        if (!node.isConnected) return;
+        slide = node.animate!(
+          [
+            { transform: `translateX(${direction * 100}%)`, opacity: 0 },
+            { transform: "translateX(0)", opacity: 1 },
+          ],
+          { duration: 105, easing: "cubic-bezier(.16,1,.3,1)", fill: "none" },
+        );
+        void slide.finished.catch(() => {});
+      })
+      .catch(() => {});
   }
   function render() {
     if (stopped) return;
@@ -171,7 +233,14 @@ export function mountSidebar(
         scroll.parentElement.appendChild(bar);
         const gesture = createWheelGesture();
         const listener = (e: DomEvent) => {
-          if (dragging || e.buttons || e.ctrlKey || controller.get()?.busy) return;
+          if (
+            bar.contains(e.target) ||
+            dragging ||
+            e.buttons ||
+            e.ctrlKey ||
+            controller.get()?.busy
+          )
+            return;
           const dx = e.deltaX ?? 0,
             dy = e.deltaY ?? 0;
           if (Math.abs(dx) > Math.abs(dy)) e.preventDefault();
@@ -182,12 +251,13 @@ export function mountSidebar(
             select(
               adjacent(
                 current.state.spaces.map((s) => s.id),
-                active,
+                pendingSpace ?? active,
                 direction,
               ),
             );
         };
-        const target = scroll;
+        // Stay reachable while the list is translated or the Space is empty.
+        const target = scroll.parentElement;
         target.addEventListener("wheel", listener, { passive: false });
         unbindWheel = () => target.removeEventListener("wheel", listener);
       }
@@ -374,6 +444,7 @@ export function mountSidebar(
   }, 15000);
   return () => {
     stopped = true;
+    cancelSlide();
     clearInterval(timer);
     observer.disconnect();
     unsubscribe();

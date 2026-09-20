@@ -52,8 +52,8 @@ test("swipes respect direction, threshold, diagonal intent and endpoints", () =>
 });
 test("trackpad momentum changes at most one Space until a quiet gap", () => {
   const wheel = createWheelGesture();
-  assert.equal(wheel(40, 0, 0), 0);
-  assert.equal(wheel(40, 0, 30), 1);
+  assert.equal(wheel(14, 0, 0), 0);
+  assert.equal(wheel(14, 0, 30), 1);
   assert.equal(wheel(100, 0, 60), 0);
   assert.equal(wheel(-100, 0, 500), -1);
   const vertical = createWheelGesture();
@@ -126,4 +126,61 @@ test("removing first Space uses next Space; last and stale removals are rejected
   assert.equal(membership(result, "new-project"), "space-2");
   assert.throws(() => removeSpace(result, "space-2"), /at least one/);
   assert.throws(() => removeSpace(state, "missing"), /no longer exists/);
+});
+
+test("fresh swipes rearm after a short pause or a decaying momentum tail", () => {
+  const wheel = createWheelGesture();
+  assert.equal(wheel(80, 0, 0), 1);
+  for (const [delta, time] of [
+    [30, 30],
+    [20, 60],
+    [10, 90],
+    [5, 120],
+    [2, 150],
+    [1, 180],
+  ])
+    assert.equal(wheel(delta, 0, time), 0);
+  assert.equal(wheel(14, 0, 200), 0);
+  assert.equal(wheel(14, 0, 220), 1);
+  assert.equal(wheel(-80, 0, 350), -1);
+});
+
+test("short gentle trackpad strokes switch once without accepting vertical drift", () => {
+  const wheel = createWheelGesture();
+  assert.equal(wheel(7, 1, 0), 0);
+  assert.equal(wheel(7, 1, 16), 0);
+  assert.equal(wheel(7, 1, 32), 0);
+  assert.equal(wheel(7, 1, 48), 1);
+  assert.equal(wheel(7, 1, 64), 0);
+  assert.equal(wheel(-28, 2, 220), -1);
+  const vertical = createWheelGesture();
+  assert.equal(vertical(28, 30, 0), 0);
+});
+
+test("direction reversal switches back without waiting for momentum to stop", () => {
+  const wheel = createWheelGesture();
+  assert.equal(wheel(28, 0, 0), 1);
+  assert.equal(wheel(12, 0, 16), 0);
+  assert.equal(wheel(-7, 0, 32), 0);
+  assert.equal(wheel(-7, 0, 48), 0);
+  assert.equal(wheel(-7, 0, 64), 0);
+  assert.equal(wheel(-7, 0, 80), -1);
+  assert.equal(wheel(28, 0, 96), 1);
+});
+
+test("gradual second stroke is recognized during an uninterrupted momentum tail", () => {
+  const wheel = createWheelGesture();
+  assert.equal(wheel(28, 0, 0), 1);
+  for (const [dx, time] of [
+    [20, 30],
+    [12, 60],
+    [8, 90],
+    [6, 120],
+    [5, 150],
+    [6, 180],
+    [9, 200],
+    [12, 220],
+  ])
+    assert.equal(wheel(dx, 0, time), 0);
+  assert.equal(wheel(12, 0, 240), 1);
 });
