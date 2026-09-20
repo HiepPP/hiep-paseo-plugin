@@ -16,6 +16,16 @@
 - Preserve native row contents and actions. Filter group visibility using owned attributes; restore on disable.
 - Never store credentials or real prompts. Preserve existing plugin and Paseo checkout changes.
 
+## Board
+
+- Add a separate plugin named Board, with the menu immediately below Schedules.
+- Each Board item represents one Paseo agent conversation, per the latest user correction. New turns update the same item.
+- The user approved the generated UI on 2026-09-20. The design approval gate is satisfied.
+- Verify actual lifecycle states and sidebar placement support against the installed host before implementation.
+- Existing Spaces sidebar approval applies to Spaces only. Board must not assume private sidebar integration is approved.
+- Board uses standard sidebar registration; the installed desktop places it directly below Schedules without injection.
+- Board uses lifecycle outcomes and active snapshots. Recent history resets when the plugin stops or reloads.
+
 ## References
 
 - [Arc Spaces](https://resources.arc.net/hc/en-us/articles/19228064149143-Spaces-Distinct-Browsing-Areas): bottom controls and horizontal swipes.

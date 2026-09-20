@@ -5,6 +5,7 @@ with its own manifest, dependencies, checks, and installation.
 
 | Plugin | Purpose |
 | --- | --- |
+| [Board](plugins/board/README.md) | Show one card per Paseo conversation with its latest running or finished state. |
 | [jev-evaluator](plugins/jev-evaluator/README.md) | Expose Jev evaluations as an MCP tool for Codex and Claude agents. |
 | [watchtower-board](plugins/watchtower-board/README.md) | Browse read-only Watchtower tasks and attach task briefs in the composer. |
 | [workspace-preflight](plugins/workspace-preflight/README.md) | Discover workspace prerequisites, expose read-only MCP evidence, and optionally ask Jev for task relevance. |

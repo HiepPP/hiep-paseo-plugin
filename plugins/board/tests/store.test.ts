@@ -1,0 +1,147 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createRunStore } from "../server/store";
+
+const agent = {
+  id: "demo",
+  workspaceId: "workspace",
+  parentAgentId: null,
+  provider: "codex",
+  cwd: "/demo/project",
+  title: "Example task",
+};
+function setup() {
+  let tick = 0;
+  return createRunStore(() => new Date(1_700_000_000_000 + tick++ * 1000).toISOString());
+}
+test("remove hides only finished cards, survives duplicate events, and permits future runs", () => {
+  const s = setup();
+  s.start(agent, "t");
+  const { observingSince, runs } = s.snapshot();
+  let endedAt: string | null = null;
+  assert.equal(
+    s.removeFinished(runs[0].id, observingSince, s.snapshot().runs[0]?.endedAt ?? endedAt),
+    false,
+  );
+  s.end(agent, "t", { kind: "completed" });
+  endedAt = s.snapshot().runs[0].endedAt;
+  assert.equal(s.removeFinished(runs[0].id, "previous plugin instance", endedAt), false);
+  assert.equal(
+    s.removeFinished(runs[0].id, observingSince, s.snapshot().runs[0]?.endedAt ?? endedAt),
+    true,
+  );
+  assert.equal(
+    s.removeFinished(runs[0].id, observingSince, s.snapshot().runs[0]?.endedAt ?? endedAt),
+    true,
+  );
+  s.end(agent, "t", { kind: "completed" });
+  s.reconcile([{ ...agent, activeTurn: { turnId: "t", startedAt: null } }], s.revision);
+  assert.equal(s.snapshot().runs.length, 0);
+  s.start(agent, "t");
+  s.end(agent, "t", { kind: "completed" });
+  assert.equal(s.snapshot().runs.length, 1);
+  assert.equal(s.snapshot().runs[0].id, runs[0].id);
+  assert.equal(s.removeFinished(runs[0].id, observingSince, endedAt), false);
+});
+test("one card per conversation across repeated and reused turn IDs", () => {
+  const s = setup();
+  s.start(agent, "turn");
+  s.start(agent, "turn");
+  assert.equal(s.snapshot().runs.length, 1);
+  s.end(agent, "turn", { kind: "completed" });
+  s.end(agent, "turn", { kind: "completed" });
+  assert.equal(s.snapshot().runs.length, 1);
+  const oldId = s.snapshot().runs[0].id;
+  s.start(agent, "turn");
+  s.end(agent, "turn", { kind: "failed", error: { message: "test" } });
+  assert.equal(s.snapshot().runs.length, 1);
+  assert.equal(s.snapshot().runs[0].id, oldId);
+  assert.equal(s.snapshot().runs[0].status, "failed");
+});
+test("bootstrap start timestamp survives a matching start hook and terminal event", () => {
+  const s = setup();
+  const startedAt = "2026-09-20T00:00:00.000Z";
+  s.reconcile(
+    [{ ...agent, project: "Display name", activeTurn: { turnId: "t", startedAt } }],
+    s.revision,
+  );
+  s.start(agent, "t");
+  s.end(agent, "t", { kind: "completed" });
+  assert.equal(s.snapshot().runs.length, 1);
+  assert.equal(s.snapshot().runs[0].startedAt, startedAt);
+  assert.equal(s.snapshot().runs[0].project, "Display name");
+});
+test("idle reconciliation never invents success; a late result can resolve unknown", () => {
+  const s = setup();
+  s.start(agent, "t");
+  s.reconcile([], s.revision);
+  assert.equal(s.snapshot().runs[0].status, "unknown");
+  s.end(agent, "t", { kind: "completed" });
+  assert.equal(s.snapshot().runs[0].status, "completed");
+  assert.equal(s.snapshot().runs.length, 1);
+});
+test("snapshot racing an end event cannot resurrect a completed run", () => {
+  const s = setup();
+  s.start(agent, "t");
+  const revision = s.revision;
+  const rows = [{ ...agent, activeTurn: { turnId: "t", startedAt: null } }];
+  s.end(agent, "t", { kind: "completed" });
+  s.reconcile(rows, revision);
+  s.reconcile(rows, s.revision);
+  assert.deepEqual(
+    s.snapshot().runs.map((r) => r.status),
+    ["completed"],
+  );
+});
+test("stale terminal does not close a newer run; changed active identity records missing outcome", () => {
+  const s = setup();
+  s.start(agent, "old");
+  s.reconcile([{ ...agent, activeTurn: { turnId: "new", startedAt: null } }], s.revision);
+  s.end(agent, "old", { kind: "completed" });
+  assert.deepEqual(
+    s.snapshot().runs.map((r) => r.status),
+    ["running"],
+  );
+  s.end(agent, "new", { kind: "canceled", reason: "test" });
+  assert.equal(s.snapshot().runs[0].status, "cancelled");
+});
+test("null IDs and missing starts preserve confirmed outcome without inventing duration", () => {
+  const s = setup();
+  s.end(agent, null, { kind: "completed" });
+  assert.equal(s.snapshot().runs[0].startedAt, null);
+  s.start(agent, null);
+  s.end(agent, null, { kind: "canceled", reason: "test" });
+  assert.equal(s.snapshot().runs.length, 1);
+  assert.equal(s.snapshot().runs[0].status, "cancelled");
+});
+test("keep latest 50 finished runs and all active runs; cleanup clears both", () => {
+  const s = setup();
+  for (let i = 0; i < 55; i++) {
+    const other = { ...agent, id: `agent-${i}` };
+    s.start(other, String(i));
+    s.end(other, String(i), { kind: "completed" });
+  }
+  s.start({ ...agent, id: "active" }, "running");
+  assert.equal(s.snapshot().runs.length, 51);
+  assert.equal(s.snapshot().runs[0].status, "running");
+  assert.equal(s.snapshot().runs[1].id, "agent-54");
+  s.clear();
+  assert.equal(s.snapshot().runs.length, 0);
+});
+
+test("a late confirmed outcome moves into recent history before retention trims", () => {
+  const s = setup();
+  s.start(agent, "missing");
+  s.reconcile([], s.revision);
+  for (let i = 0; i < 49; i++) {
+    const other = { ...agent, id: `agent-${i}` };
+    s.start(other, String(i));
+    s.end(other, String(i), { kind: "completed" });
+  }
+  s.end(agent, "missing", { kind: "completed" });
+  const latest = { ...agent, id: "latest" };
+  s.start(latest, "latest");
+  s.end(latest, "latest", { kind: "completed" });
+  assert.equal(s.snapshot().runs.length, 50);
+  assert.equal(s.snapshot().runs[1].id, "demo");
+});
