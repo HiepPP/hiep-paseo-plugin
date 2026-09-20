@@ -14,6 +14,31 @@ function setup() {
   let tick = 0;
   return createRunStore(() => new Date(1_700_000_000_000 + tick++ * 1000).toISOString());
 }
+test("known conversation titles survive new turns with untitled lifecycle payloads", () => {
+  const s = setup();
+  s.start(agent, "first");
+  s.end(agent, "first", { kind: "completed" });
+  s.start({ ...agent, title: null }, "second");
+  s.end({ ...agent, title: null }, "second", { kind: "completed" });
+  assert.equal(s.snapshot().runs.length, 1);
+  assert.equal(s.snapshot().runs[0].title, agent.title);
+});
+
+test("host titles distinguish finished conversations without changing their outcomes", () => {
+  const s = setup();
+  s.end({ ...agent, title: null }, "first", { kind: "completed" });
+  s.end({ ...agent, id: "other", title: null }, "second", { kind: "completed" });
+  s.updateTitle(agent.id, "First conversation");
+  s.updateTitle("other", "Second conversation");
+  s.updateTitle(agent.id, null);
+  assert.deepEqual(
+    s.snapshot().runs.map((run) => [run.agentId, run.title, run.status]),
+    [
+      ["other", "Second conversation", "completed"],
+      [agent.id, "First conversation", "completed"],
+    ],
+  );
+});
 test("remove hides only finished cards, survives duplicate events, and permits future runs", () => {
   const s = setup();
   s.start(agent, "t");

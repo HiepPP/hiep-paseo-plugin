@@ -20,8 +20,19 @@ export default function contribute(server: PluginServerContext) {
     if (!pending) {
       const revision = store.revision;
       pending = listRunning(paseo, controller.signal)
-        .then((agents) => {
+        .then(async (agents) => {
           if (!controller.signal.aborted) store.reconcile(agents, revision);
+          await Promise.all(
+            store
+              .snapshot()
+              .runs.filter((run) => run.title === "Untitled run")
+              .map(async (run) => {
+                const current = await paseo.agents.ref(run.agentId).refresh();
+                if (!controller.signal.aborted && current) {
+                  store.updateTitle(run.agentId, current.agent.title);
+                }
+              }),
+          );
         })
         .finally(() => {
           pending = undefined;
