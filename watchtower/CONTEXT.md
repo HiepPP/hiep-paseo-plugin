@@ -28,6 +28,10 @@
 
 ## References
 
+- TASK-013 adds inline Send for suggested prompts and optional Jev auto-run. The desktop plugin is implemented and installed.
+- [Prompt button concept](designs/next-step-prompts.png) uses synthetic text; the final UI places Send at the bottom right.
+- TASK-013 must verify its own integration support. Earlier sidebar approval does not authorize a private timeline adapter.
+
 - [Arc Spaces](https://resources.arc.net/hc/en-us/articles/19228064149143-Spaces-Distinct-Browsing-Areas): bottom controls and horizontal swipes.
 - [Plugin reference](https://paseo.sh/docs/plugins/reference): surfaces, navigation, host settings, and runtime boundaries.
 - [Plugin](../plugins/workspace-spaces/README.md): implementation and supported behavior.
@@ -55,3 +59,15 @@
 - Current routing is functional; two small synthetic cases were slower than direct baseline. Cost savings and production calibration remain unproven.
 
 - Whole-workflow token follow-up: native session accounting and Jev ledger implemented; two fresh cases used 5.06x and 11.16x baseline tokens. No token savings demonstrated. Final counts reconciled after actor closure.
+
+## Next prompt actions
+
+- The user authorized TASK-013 implementation and the private desktop adapter.
+- Place Send inside suggested prompt blocks under What Next or Next Steps.
+- Optional Jev auto-send starts disabled. Its per-conversation control belongs in Command Center, outside prompt blocks.
+- Jev evaluates relevance; it does not grant permissions or execute coding work itself.
+- Verify installed timeline extension support before choosing integration. Keep Paseo source unchanged.
+- Existing private sidebar approval does not approve private timeline injection.
+- Use synthetic text in the generated design. Keep real conversation content outside Git.
+- On 2026-09-21, the user approved the Send concept and requested implementation of TASK-013.
+- TASK-013 public API preflight found no inline Markdown action slot. The user approved a desktop DOM adapter.

@@ -3,7 +3,7 @@
 See what your agents are doing. Keep projects organized. Bring task context and
 workspace checks into Paseo without leaving your conversation.
 
-Six independent local plugins. Install only what you need; each owns its
+Seven independent local plugins. Install only what you need; each owns its
 dependencies, checks, and configuration.
 
 ## See every conversation at a glance
@@ -34,6 +34,19 @@ snapshot to your next message. Nothing sends automatically.
 <img src="docs/images/watchtower.png" alt="Watchtower board showing 83 percent complete, one blocked task, and an expanded task brief." width="596">
 
 [Open your Watchtower plan →](plugins/watchtower-board/README.md)
+
+## Read the next step, then send it
+
+Next prompt actions puts **Send** at the bottom right of a suggested prompt.
+Read the full suggestion, then continue in the same conversation without copying
+and pasting. Your composer draft stays intact.
+
+![A multiline suggested prompt in Paseo with Send below the final line, aligned to the bottom right.](docs/images/next-prompt-actions.png)
+
+Optional Jev auto-run lives in Command Center and starts off. Desktop only;
+uses a private adapter for the existing Markdown blocks.
+
+[Set up next prompt actions →](plugins/next-prompt-actions/README.md)
 
 ## Find missing prerequisites before starting work
 
@@ -68,6 +81,7 @@ for client support and limitations, including Spaces' private desktop adapter.
 
 | Plugin | Purpose |
 | --- | --- |
+| [next-prompt-actions](plugins/next-prompt-actions/README.md) | Send next-step prompts inside their blocks on desktop, with optional bounded Jev auto-run. |
 | [jev-orchestrator](plugins/jev-orchestrator/README.md) | Direct Jev model/effort routing to one agent, plus optional scoped delegation with discovery, escalation, review, and ownership locks. |
 | [Board](plugins/board/README.md) | Show one card per Paseo conversation with its latest running or finished state. |
 | [jev-evaluator](plugins/jev-evaluator/README.md) | Expose Jev evaluations as an MCP tool for Codex and Claude agents. |

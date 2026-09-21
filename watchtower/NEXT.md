@@ -2,7 +2,7 @@
 
 ## Current Active Plan
 
-- Title: Desktop workspace plugins and Jev autonomous delegation
+- Title: Desktop workspace plugins, Jev delegation, and prompt actions
 - Slug: 20260920-arc-style-project-spaces
 - Status: ACTIVE
 - Updated: 2026-09-21
@@ -23,6 +23,7 @@
 | 10 | TASK-010 Risk-based review | J | DONE | [Spec](tasks/TASK-010-risk-review.md) | TASK-009 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
 | 11 | TASK-011 Dependency and ownership scheduler | J | DONE | [Spec](tasks/TASK-011-dependency-scheduler.md) | TASK-010 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
 | 12 | TASK-012 Measured routing history | J | DONE | [Spec](tasks/TASK-012-routing-history.md) | TASK-011 | [Context](CONTEXT.md) | Direct benchmark: checks pass; 2.1253x tokens and 24.923% slower. |
+| 13 | TASK-013 Inline prompt Send and optional Jev auto-send | P | IN PROGRESS | [Spec](tasks/TASK-013-next-prompt-actions.md) | - | [Context](CONTEXT.md) | Desktop adapter authorized and installed; live acceptance in progress. |
 
 ## Plan Verify
 
@@ -36,6 +37,8 @@
 - Record device/browser limitations without claiming untested behavior.
 
 ## Handoff
+
+- TASK-013 desktop DOM adapter approved and installed. Complete live acceptance and record limitations.
 
 - TASK-007–012 complete: Jev orchestrator installed; 24 tests and real MCP/child execution verified.
 - [Live comparison](../plugins/jev-orchestrator/VERIFICATION.md): routed workflows passed but were slower on two small fixtures; no savings claim.

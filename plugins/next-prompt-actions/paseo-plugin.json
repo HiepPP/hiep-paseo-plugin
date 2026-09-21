@@ -1,0 +1,6 @@
+{
+  "id": "next-prompt-actions",
+  "requirements": {
+    "paseo": "0.8.x"
+  }
+}
