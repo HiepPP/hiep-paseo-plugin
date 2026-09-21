@@ -35,3 +35,10 @@ Handoff:
 - Eleven tests pass, including DOM filtering, wheel handling, rerenders, errors, and cleanup.
 - Typecheck and lint pass. Physical trackpad input remains unverified; TASK-004 stays BLOCKED for acceptance.
 - Existing Paseo source changes were preserved; no source file there was edited.
+
+## 2026-09-21 implementation preflight
+
+- `npm --prefix plugins/workspace-spaces run typecheck` and `run lint` pass.
+- `npm --prefix plugins/workspace-spaces test` passes all 22 tests, including momentum and repeated gentle strokes.
+- `paseo plugin ls workspace-spaces --json` reports running.
+- No source change was needed. Physical trackpad acceptance remains unverified and BLOCKED.
