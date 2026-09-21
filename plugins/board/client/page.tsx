@@ -116,12 +116,40 @@ function RunCard({
         >
           {run.title}
         </Text>
-        <Text
-          numberOfLines={1}
-          style={{ color: colors.foregroundMuted, fontSize: 14, lineHeight: 20 }}
-        >
-          {run.project} · {run.provider}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 6,
+              backgroundColor: colors.accent,
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Text style={{ color: colors.accentForeground, fontSize: 13, fontWeight: "700" }}>
+              {Array.from(run.project.trim())[0]?.toUpperCase() ?? "?"}
+            </Text>
+          </View>
+          <Text
+            numberOfLines={1}
+            style={{
+              color: colors.foreground,
+              fontSize: 15,
+              lineHeight: 22,
+              fontWeight: "700",
+              flexShrink: 1,
+            }}
+          >
+            {run.project}
+          </Text>
+          <Text style={{ color: colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>
+            · {run.provider}
+          </Text>
+        </View>
         <View
           style={{
             flexDirection: "row",
