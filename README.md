@@ -3,7 +3,7 @@
 See what your agents are doing. Keep projects organized. Bring task context and
 workspace checks into Paseo without leaving your conversation.
 
-Five independent local plugins. Install only what you need; each owns its
+Six independent local plugins. Install only what you need; each owns its
 dependencies, checks, and configuration.
 
 ## See every conversation at a glance
@@ -68,6 +68,7 @@ for client support and limitations, including Spaces' private desktop adapter.
 
 | Plugin | Purpose |
 | --- | --- |
+| [jev-orchestrator](plugins/jev-orchestrator/README.md) | Direct Jev model/effort routing to one agent, plus optional scoped delegation with discovery, escalation, review, and ownership locks. |
 | [Board](plugins/board/README.md) | Show one card per Paseo conversation with its latest running or finished state. |
 | [jev-evaluator](plugins/jev-evaluator/README.md) | Expose Jev evaluations as an MCP tool for Codex and Claude agents. |
 | [watchtower-board](plugins/watchtower-board/README.md) | Browse read-only Watchtower tasks and attach task briefs in the composer. |

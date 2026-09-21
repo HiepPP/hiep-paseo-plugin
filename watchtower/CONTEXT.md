@@ -39,3 +39,19 @@
 - Browser and native mobile retain the standalone page fallback.
 - Pinned rows from uncatalogued hosts remain visible when project identity cannot be resolved.
 - Fifteen tests and live sidebar move/filter/disable/enable checks pass. Physical trackpad input remains unverified.
+
+## Jev autonomous delegation
+
+- TASK-007–012 are the requested implementation scope. TASK-004 remains a separate physical-input check.
+- Implement sequentially in this session. Use one standalone plugin, with no Paseo source edits or worktrees.
+- User authorized installation, real Jev evaluations, and bounded real child runs to measure effectiveness.
+- Use saved profiles and exact provider/model/mode/effort/features. Do not invent model tiers or alter profiles.
+- Use named tasks, explicit file ownership, dependency IDs, resource locks, and bounded attempts.
+- Check results are measured by the plugin. Child claims and Jev judgments never count as verified success.
+- Local job state and measurements must remain outside Git. Do not store credentials or real prompts in Git.
+- Record exact evidence and limitations; a small synthetic benchmark is not production calibration.
+
+- TASK-007–012 completed on 2026-09-21. See the orchestrator verification report for real runtime evidence and retained failures.
+- Current routing is functional; two small synthetic cases were slower than direct baseline. Cost savings and production calibration remain unproven.
+
+- Whole-workflow token follow-up: native session accounting and Jev ledger implemented; two fresh cases used 5.06x and 11.16x baseline tokens. No token savings demonstrated. Final counts reconciled after actor closure.

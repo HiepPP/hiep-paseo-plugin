@@ -2,10 +2,10 @@
 
 ## Current Active Plan
 
-- Title: Desktop sidebar Spaces and Board plugins
+- Title: Desktop workspace plugins and Jev autonomous delegation
 - Slug: 20260920-arc-style-project-spaces
 - Status: ACTIVE
-- Updated: 2026-09-20
+- Updated: 2026-09-21
 
 ## Tracker
 
@@ -17,8 +17,18 @@
 | 4 | TASK-004 Swipe between Spaces | A | BLOCKED | [Spec](tasks/TASK-004-swipe-between-spaces.md) | TASK-003 | [Context](CONTEXT.md) | Desktop sidebar injection approved. |
 | 5 | TASK-005 Move projects between Spaces | A | DONE | [Spec](tasks/TASK-005-move-project-between-spaces.md) | TASK-004 | [Context](CONTEXT.md) | Desktop sidebar injection approved. |
 | 6 | TASK-006 Board running and finished tasks | A | DONE | [Spec](tasks/TASK-006-board.md) | - | [Context](CONTEXT.md) | Installed; desktop menu and live run transition verified. Twelve tests pass. |
+| 7 | TASK-007 Delegation broker | J | DONE | [Spec](tasks/TASK-007-delegation-broker.md) | - | [Context](CONTEXT.md) | Direct model/effort route added; legacy delegation preserved. |
+| 8 | TASK-008 Adaptive escalation | J | DONE | [Spec](tasks/TASK-008-adaptive-escalation.md) | TASK-007 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
+| 9 | TASK-009 Discovery before implementation | J | DONE | [Spec](tasks/TASK-009-discovery-first.md) | TASK-008 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
+| 10 | TASK-010 Risk-based review | J | DONE | [Spec](tasks/TASK-010-risk-review.md) | TASK-009 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
+| 11 | TASK-011 Dependency and ownership scheduler | J | DONE | [Spec](tasks/TASK-011-dependency-scheduler.md) | TASK-010 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
+| 12 | TASK-012 Measured routing history | J | DONE | [Spec](tasks/TASK-012-routing-history.md) | TASK-011 | [Context](CONTEXT.md) | Direct benchmark: checks pass; 2.1253x tokens and 24.923% slower. |
 
 ## Plan Verify
+
+- For TASK-007–012, run the orchestrator format, typecheck, lint, and offline tests.
+- Verify the installed orchestrator and live child model/effort, task outputs, timing, and cleanup.
+- Report baseline comparisons separately from synthetic/offline tests. Preserve TASK-004.
 
 - Run plugin format, typecheck, lint, and tests.
 - Verify the plugin runs and the existing sidebar supports tabs, project moves, and scoped wheel events.
@@ -26,6 +36,9 @@
 - Record device/browser limitations without claiming untested behavior.
 
 ## Handoff
+
+- TASK-007–012 complete: Jev orchestrator installed; 24 tests and real MCP/child execution verified.
+- [Live comparison](../plugins/jev-orchestrator/VERIFICATION.md): routed workflows passed but were slower on two small fixtures; no savings claim.
 
 - Board is installed and running. Desktop light/dark, sidebar placement, and a real run transition are verified.
 - Board retains 50 observed finished conversations in memory. Native mobile acceptance remains unverified.
