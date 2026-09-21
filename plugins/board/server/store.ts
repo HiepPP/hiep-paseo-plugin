@@ -25,9 +25,11 @@ export function createRunStore(now = () => new Date().toISOString()) {
   function make(agent: PluginHookAgent, turnId: string | null, startedAt: string | null): Run {
     const previous = finished.findIndex((run) => run.agentId === agent.id);
     const title = agent.title || active.get(agent.id)?.title || finished[previous]?.title;
+    const starred = active.get(agent.id)?.starred ?? finished[previous]?.starred ?? false;
     if (previous !== -1) finished.splice(previous, 1);
     return {
       ...metadata(agent),
+      starred,
       title: title || "Untitled run",
       id: agent.id,
       providerTurnId: turnId,
@@ -127,6 +129,13 @@ export function createRunStore(now = () => new Date().toISOString()) {
         run.title = agent.title || run.title;
         run.project = agent.project || run.project;
       }
+    },
+    setStarred(id: string, scope: string, starred: boolean) {
+      if (scope !== observingSince) return false;
+      const run = active.get(id) ?? finished.find((item) => item.id === id);
+      if (!run || run.dismissed) return false;
+      run.starred = starred;
+      return true;
     },
     removeFinished(id: string, scope: string, endedAt: string | null) {
       if (scope !== observingSince) return false;

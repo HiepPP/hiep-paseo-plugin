@@ -4,7 +4,7 @@ import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { boardRpc, removeRunRpc, type BoardRun } from "../shared/board";
+import { boardRpc, removeRunRpc, starRunRpc, starredFirst, type BoardRun } from "../shared/board";
 import { boardConnectionState } from "./connection";
 
 const SECOND = 1_000;
@@ -64,13 +64,17 @@ function RunCard({
   theme,
   onRemove,
   onOpen,
+  onStar,
 }: {
   run: BoardRun;
   now: number;
   theme: PluginSurfaceProps["theme"];
   onRemove?: (id: string) => Promise<void>;
   onOpen?: (agentId: string) => void;
+  onStar: (id: string, starred: boolean) => Promise<void>;
 }) {
+  const [starring, setStarring] = useState(false);
+  const [starError, setStarError] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState(false);
   const colors = theme.colors;
@@ -112,7 +116,13 @@ function RunCard({
       >
         <Text
           numberOfLines={2}
-          style={{ color: colors.foreground, fontSize: 18, lineHeight: 24, fontWeight: "600" }}
+          style={{
+            color: colors.foreground,
+            fontSize: 18,
+            lineHeight: 24,
+            fontWeight: "600",
+            paddingRight: 38,
+          }}
         >
           {run.title}
         </Text>
@@ -175,6 +185,47 @@ function RunCard({
           ) : null}
         </View>
       </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${run.starred ? "Unstar" : "Star"} ${run.title}`}
+        accessibilityState={{ selected: run.starred, disabled: starring }}
+        disabled={starring}
+        onPress={async () => {
+          setStarring(true);
+          setStarError(false);
+          try {
+            await onStar(run.id, !run.starred);
+          } catch {
+            setStarError(true);
+          } finally {
+            setStarring(false);
+          }
+        }}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          width: 44,
+          height: 44,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: starring ? 0.5 : 1,
+        }}
+      >
+        <Text
+          style={{
+            color: run.starred ? colors.statusWarning : colors.foregroundMuted,
+            fontSize: 24,
+          }}
+        >
+          {run.starred ? "★" : "☆"}
+        </Text>
+      </Pressable>
+      {starError ? (
+        <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: 13 }}>
+          Could not update star. Please retry.
+        </Text>
+      ) : null}
       {run.status !== "running" && onRemove ? (
         <View style={{ alignItems: "flex-end", gap: 6 }}>
           <Pressable
@@ -223,6 +274,7 @@ function RunColumn({
   theme,
   onRemove,
   onOpen,
+  onStar,
 }: {
   title: string;
   runs: BoardRun[];
@@ -231,6 +283,7 @@ function RunColumn({
   theme: PluginSurfaceProps["theme"];
   onRemove?: (id: string) => Promise<void>;
   onOpen?: (agentId: string) => void;
+  onStar: (id: string, starred: boolean) => Promise<void>;
 }) {
   const colors = theme.colors;
   return (
@@ -276,6 +329,7 @@ function RunColumn({
             theme={theme}
             onRemove={onRemove}
             onOpen={onOpen}
+            onStar={onStar}
           />
         ))
       ) : (
@@ -302,6 +356,7 @@ function RunColumn({
 export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProps) {
   const readBoard = useRpc(boardRpc);
   const removeRun = useRpc(removeRunRpc);
+  const setStarred = useRpc(starRunRpc);
   const board = useQuery({
     queryKey: ["board", host.id],
     queryFn: () => readBoard({}),
@@ -314,13 +369,25 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
     const timer = setInterval(() => setNow(Date.now()), SECOND);
     return () => clearInterval(timer);
   }, []);
+  const onStar = async (id: string, starred: boolean) => {
+    const result = await setStarred({ id, starred, observingSince: board.data!.observingSince });
+    if (!result.updated) throw new Error("Run changed. Refresh and retry.");
+    await board.refetch({ throwOnError: true });
+  };
   const runs = board.data?.runs ?? [];
-  const running = useMemo(() => runs.filter((run) => run.status === "running"), [runs]);
+  const running = useMemo(
+    () => runs.filter((run) => run.status === "running").sort(starredFirst),
+    [runs],
+  );
   const finished = useMemo(
     () =>
       runs
         .filter((run) => run.status !== "running")
-        .sort((left, right) => (timeValue(right.endedAt) ?? -1) - (timeValue(left.endedAt) ?? -1)),
+        .sort(
+          (left, right) =>
+            starredFirst(left, right) ||
+            (timeValue(right.endedAt) ?? -1) - (timeValue(left.endedAt) ?? -1),
+        ),
     [runs],
   );
   const colors = theme.colors;
@@ -507,6 +574,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
             <RunColumn
               title="Running"
               runs={running}
+              onStar={onStar}
               now={now}
               emptyMessage="No conversations are running."
               theme={theme}
@@ -515,6 +583,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
             <RunColumn
               title="Just finished"
               runs={finished}
+              onStar={onStar}
               now={now}
               emptyMessage="No finished conversations observed yet."
               theme={theme}

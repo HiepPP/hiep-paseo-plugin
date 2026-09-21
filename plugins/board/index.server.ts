@@ -1,7 +1,7 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { createRunStore } from "./server/store";
 import { listRunning } from "./server/snapshot";
-import { boardRpc, removeRunRpc } from "./shared/board";
+import { boardRpc, removeRunRpc, starRunRpc } from "./shared/board";
 
 export default function contribute(server: PluginServerContext) {
   const store = createRunStore();
@@ -13,6 +13,9 @@ export default function contribute(server: PluginServerContext) {
     store.end(agent, turnId, outcome),
   );
   let pending: Promise<void> | undefined;
+  server.handle(starRunRpc, ({ id, observingSince, starred }) => ({
+    updated: store.setStarred(id, observingSince, starred),
+  }));
   server.handle(removeRunRpc, ({ id, observingSince, endedAt }) => ({
     removed: store.removeFinished(id, observingSince, endedAt),
   }));

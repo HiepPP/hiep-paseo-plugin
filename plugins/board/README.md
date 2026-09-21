@@ -5,8 +5,10 @@ Requires Paseo daemon and client 0.8.x. Uses standard plugin surfaces, sidebar r
 
 ## Behavior
 
+- Star a card using its top-right button to put it first in either column. Stars follow conversations between columns and new turns, and are shared across connected clients. Like Board history, stars are in memory and reset on plugin reload; the existing 50-finished-card retention still applies.
 - Each card represents one Paseo agent conversation. New turns update the same card and move it between columns.
 - Click a card to open its conversation on the selected host. Remove is a separate action and does not navigate.
+- Finished conversations also show a Remove button at the top-right of the thread on desktop (beside the composer on native clients). Successful removal returns to Board; failures keep the conversation open. Membership refreshes every two seconds.
 - A removed conversation appears again when it starts a new turn. Status and duration describe the latest turn.
 - Remove hides a finished card from Board on all connected clients. It never deletes or archives the agent or chat.
 - Running cards refresh from the host every two seconds while the page is open.
@@ -27,7 +29,7 @@ The microphone button remains available. Browser and mobile clients use the Boar
 
 Board uses the native sidebar contribution. With the default navigation and current plugin set, it follows Schedules.
 Paseo owns ordering; customized clients can move Board below Schedules in Settings → Appearance → Sidebar navigation.
-The plugin does not overwrite user preferences or modify Paseo source or private DOM.
+The plugin does not overwrite user preferences or modify Paseo source. The desktop Remove placement uses a scoped DOM adapter; the action remains agent-scoped and owned by Paseo.
 
 ## Checks and install
 

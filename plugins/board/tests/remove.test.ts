@@ -1,0 +1,87 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { PluginClientContext, PluginComposerPillContribution } from "@getpaseo/plugin/client";
+import { installRemoveButtons } from "../client/remove";
+import { boardRpc } from "../shared/board";
+
+test("only finished threads get Remove; navigate only after confirmed removal; clean up", async () => {
+  const pills = new Map<string, PluginComposerPillContribution>();
+  const calls: unknown[] = [];
+  let removed = false;
+  let opens = 0;
+  const client = {
+    async rpc(contract: unknown, input: unknown) {
+      if (contract === boardRpc)
+        return {
+          observingSince: "scope",
+          runs: [
+            { id: "finished", agentId: "finished", status: "completed", endedAt: "end" },
+            { id: "running", agentId: "running", status: "running", endedAt: null },
+          ],
+        };
+      calls.push(input);
+      return { removed };
+    },
+    paseo: {
+      agents: { ref: () => ({ refresh: async () => ({ agent: { workspaceId: "workspace" } }) }) },
+    },
+    addComposerPill(pill: PluginComposerPillContribution) {
+      pills.set(pill.agentId, pill);
+      return {
+        update() {},
+        remove() {
+          pills.delete(pill.agentId);
+        },
+      };
+    },
+    openSurface(id: string) {
+      assert.equal(id, "board");
+      opens++;
+    },
+  } as unknown as PluginClientContext;
+  const cleanup = installRemoveButtons(client);
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual([...pills.keys()], ["finished"]);
+    const behavior = pills.get("finished")!.button.behavior;
+    assert.equal(behavior.kind, "action");
+    if (behavior.kind !== "action") return;
+    await assert.rejects(async () => behavior.onPress(), /Run changed/);
+    assert.equal(opens, 0);
+    assert.equal(pills.size, 1);
+    removed = true;
+    await behavior.onPress();
+    assert.equal(opens, 1);
+    assert.equal(pills.size, 0);
+    assert.deepEqual(calls, [
+      { id: "finished", observingSince: "scope", endedAt: "end" },
+      { id: "finished", observingSince: "scope", endedAt: "end" },
+    ]);
+  } finally {
+    cleanup();
+  }
+  assert.equal(pills.size, 0);
+});
+
+test("cleanup discards an in-flight snapshot without registering buttons", async () => {
+  let resolve!: (value: unknown) => void;
+  const snapshot = new Promise((done) => {
+    resolve = done;
+  });
+  const client = {
+    rpc: () => snapshot,
+    paseo: {
+      agents: { ref: () => ({ refresh: async () => ({ agent: { workspaceId: "workspace" } }) }) },
+    },
+    addComposerPill() {
+      assert.fail("registered after cleanup");
+    },
+  } as unknown as PluginClientContext;
+  const cleanup = installRemoveButtons(client);
+  cleanup();
+  resolve({
+    observingSince: "scope",
+    runs: [{ id: "finished", agentId: "finished", status: "completed" }],
+  });
+  await new Promise((done) => setImmediate(done));
+});

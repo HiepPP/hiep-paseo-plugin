@@ -5,6 +5,7 @@ export const runSchema = z.object({
   id: z.string(),
   agentId: z.string(),
   title: z.string(),
+  starred: z.boolean(),
   project: z.string(),
   provider: z.string(),
   status: z.enum(["running", "completed", "failed", "cancelled", "unknown"]),
@@ -25,3 +26,13 @@ export const boardRpc = defineRpc({
     observingSince: z.string(),
   }),
 });
+
+export const starRunRpc = defineRpc({
+  name: "board.set-starred",
+  input: z.object({ id: z.string(), observingSince: z.string(), starred: z.boolean() }),
+  output: z.object({ updated: z.boolean() }),
+});
+
+export function starredFirst(left: Pick<BoardRun, "starred">, right: Pick<BoardRun, "starred">) {
+  return Number(right.starred) - Number(left.starred);
+}

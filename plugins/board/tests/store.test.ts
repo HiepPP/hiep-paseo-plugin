@@ -170,3 +170,24 @@ test("a late confirmed outcome moves into recent history before retention trims"
   assert.equal(s.snapshot().runs.length, 50);
   assert.equal(s.snapshot().runs[1].id, "demo");
 });
+
+test("stars survive column changes and new turns; unstar and stale requests are handled", () => {
+  const s = setup();
+  s.start(agent, "first");
+  const scope = s.snapshot().observingSince;
+  assert.equal(s.snapshot().runs[0].starred, false);
+  assert.equal(s.setStarred(agent.id, "stale", true), false);
+  assert.equal(s.setStarred("missing", scope, true), false);
+  assert.equal(s.setStarred(agent.id, scope, true), true);
+  s.end(agent, "first", { kind: "completed" });
+  assert.equal(s.snapshot().runs[0].starred, true);
+  s.start(agent, "second");
+  assert.equal(s.snapshot().runs[0].starred, true);
+  s.reconcile([{ ...agent, activeTurn: { turnId: "third", startedAt: null } }], s.revision);
+  assert.equal(s.snapshot().runs[0].starred, true);
+  s.end(agent, "third", { kind: "completed" });
+  assert.equal(s.setStarred(agent.id, scope, false), true);
+  assert.equal(s.snapshot().runs[0].starred, false);
+  s.removeFinished(agent.id, scope, s.snapshot().runs[0].endedAt);
+  assert.equal(s.setStarred(agent.id, scope, true), false);
+});

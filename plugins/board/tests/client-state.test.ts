@@ -63,3 +63,24 @@ test("only a recent successful snapshot is live", () => {
     "error",
   );
 });
+
+test("stars rank first in each column while preserving the existing order within each group", async () => {
+  const { starredFirst } = await import("../shared/board");
+  for (const column of ["running", "finished"]) {
+    const rows = [
+      { id: `${column}-first`, starred: false },
+      { id: `${column}-star-first`, starred: true },
+      { id: `${column}-second`, starred: false },
+      { id: `${column}-star-second`, starred: true },
+    ];
+    assert.deepEqual(
+      rows.toSorted(starredFirst).map((row) => row.id),
+      [`${column}-star-first`, `${column}-star-second`, `${column}-first`, `${column}-second`],
+    );
+    rows[1].starred = false;
+    assert.deepEqual(
+      rows.toSorted(starredFirst).map((row) => row.id),
+      [`${column}-star-second`, `${column}-first`, `${column}-star-first`, `${column}-second`],
+    );
+  }
+});
