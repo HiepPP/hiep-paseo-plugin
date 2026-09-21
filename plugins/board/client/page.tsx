@@ -79,6 +79,8 @@ function RunCard({
   onOpen?: (agentId: string) => void;
   onStar: (id: string, starred: boolean) => Promise<void>;
 }) {
+  const [starHovered, setStarHovered] = useState(false);
+  const [removeHovered, setRemoveHovered] = useState(false);
   const [starring, setStarring] = useState(false);
   const [starError, setStarError] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -145,8 +147,14 @@ function RunCard({
         accessibilityLabel={`Open conversation ${run.title}`}
         disabled={!onOpen}
         onPress={() => onOpen?.(run.agentId)}
-        style={({ pressed }) => ({ gap: s(12), opacity: pressed ? 0.7 : 1 })}
-      >
+        style={({ pressed }) => ({
+          position: "absolute",
+          inset: 0,
+          borderRadius: s(12),
+          backgroundColor: pressed ? colors.surface2 : "transparent",
+        })}
+      />
+      <View pointerEvents="none" style={{ gap: s(12) }}>
         <Text
           numberOfLines={2}
           style={{
@@ -286,12 +294,14 @@ function RunCard({
             ) : null}
           </View>
         )}
-      </Pressable>
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${run.starred ? "Unstar" : "Star"} ${run.title}`}
         accessibilityState={{ selected: run.starred, disabled: starring }}
         disabled={starring}
+        onHoverIn={() => setStarHovered(true)}
+        onHoverOut={() => setStarHovered(false)}
         onPress={async () => {
           setStarring(true);
           setStarError(false);
@@ -311,12 +321,17 @@ function RunCard({
           height: Math.max(44, s(44)),
           alignItems: "center",
           justifyContent: "center",
+          borderRadius: s(8),
+          backgroundColor: starHovered && !starring ? colors.surface2 : "transparent",
           opacity: starring ? 0.5 : 1,
         }}
       >
         <Text
           style={{
-            color: run.starred ? colors.statusWarning : colors.foregroundMuted,
+            color:
+              run.starred || (starHovered && !starring)
+                ? colors.statusWarning
+                : colors.foregroundMuted,
             fontSize: s(24),
           }}
         >
@@ -324,16 +339,22 @@ function RunCard({
         </Text>
       </Pressable>
       {starError ? (
-        <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: s(13) }}>
+        <Text
+          pointerEvents="none"
+          accessibilityRole="alert"
+          style={{ color: colors.statusDanger, fontSize: s(13) }}
+        >
           Could not update star. Please retry.
         </Text>
       ) : null}
       {run.status !== "running" && onRemove ? (
-        <View style={{ alignItems: "flex-end", gap: s(6) }}>
+        <View pointerEvents="box-none" style={{ alignItems: "flex-end", gap: s(6) }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove ${run.title} from Board`}
             disabled={removing}
+            onHoverIn={() => setRemoveHovered(true)}
+            onHoverOut={() => setRemoveHovered(false)}
             onPress={async () => {
               setRemoving(true);
               setRemoveError(false);
@@ -350,15 +371,26 @@ function RunCard({
               paddingVertical: s(8),
               borderRadius: s(8),
               backgroundColor: colors.surface2,
+              boxShadow:
+                removeHovered && !removing ? `inset 0 0 0 1px ${colors.statusDanger}` : "none",
               opacity: removing ? 0.5 : 1,
             }}
           >
-            <Text style={{ color: colors.foregroundMuted, fontSize: s(13) }}>
+            <Text
+              style={{
+                color: removeHovered && !removing ? colors.statusDanger : colors.foregroundMuted,
+                fontSize: s(13),
+              }}
+            >
               {removing ? "Removing…" : "Remove"}
             </Text>
           </Pressable>
           {removeError ? (
-            <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: s(13) }}>
+            <Text
+              pointerEvents="none"
+              accessibilityRole="alert"
+              style={{ color: colors.statusDanger, fontSize: s(13) }}
+            >
               Could not remove. Please retry.
             </Text>
           ) : null}
