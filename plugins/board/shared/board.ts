@@ -6,6 +6,7 @@ export const runSchema = z.object({
   agentId: z.string(),
   title: z.string(),
   starred: z.boolean(),
+  needsInput: z.boolean().optional(),
   project: z.string(),
   provider: z.string(),
   status: z.enum(["running", "completed", "failed", "cancelled", "unknown"]),

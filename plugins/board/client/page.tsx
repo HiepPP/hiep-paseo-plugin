@@ -104,16 +104,42 @@ function RunCard({
 
   return (
     <View
-      accessibilityLabel={`${run.title}, ${statusLabel(run.status)}`}
+      accessibilityLabel={`${run.title}, ${run.needsInput ? "Needs input" : statusLabel(run.status)}`}
       style={{
         gap: s(12),
         padding: s(18),
         borderRadius: s(12),
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: run.needsInput ? colors.statusWarning : colors.border,
         backgroundColor: colors.surface1,
       }}
     >
+      {run.needsInput ? (
+        <View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          style={{ position: "absolute", inset: 0, borderRadius: s(12), overflow: "hidden" }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: colors.statusWarning,
+              opacity: 0.06,
+            }}
+          />
+          <View
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: s(4),
+              backgroundColor: colors.statusWarning,
+            }}
+          />
+        </View>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open conversation ${run.title}`}
@@ -167,35 +193,99 @@ function RunCard({
             · {run.provider}
           </Text>
         </View>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: s(8),
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
+        {run.needsInput ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: s(8),
+              paddingHorizontal: s(12),
+              paddingVertical: s(8),
+              borderRadius: s(8),
+              overflow: "hidden",
+            }}
+          >
             <View
+              pointerEvents="none"
               accessibilityElementsHidden
               style={{
-                width: s(9),
-                height: s(9),
-                borderRadius: s(5),
-                backgroundColor: statusColor,
+                position: "absolute",
+                inset: 0,
+                backgroundColor: colors.statusWarning,
+                opacity: 0.14,
               }}
             />
-            <Text style={{ color: statusColor, fontSize: s(14), lineHeight: s(20) }}>
-              {statusLabel(run.status)} · {timing}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
+              <View
+                accessibilityElementsHidden
+                style={{
+                  width: s(22),
+                  height: s(22),
+                  borderRadius: s(11),
+                  backgroundColor: colors.statusWarning,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.surface1,
+                    fontSize: s(16),
+                    lineHeight: s(20),
+                    fontWeight: "800",
+                  }}
+                >
+                  !
+                </Text>
+              </View>
+              <Text
+                style={{
+                  color: colors.statusWarning,
+                  fontSize: s(15),
+                  lineHeight: s(22),
+                  fontWeight: "700",
+                }}
+              >
+                Needs input
+              </Text>
+            </View>
+            <Text style={{ color: colors.foregroundMuted, fontSize: s(14), lineHeight: s(20) }}>
+              {timing}
             </Text>
           </View>
-          {run.status !== "running" ? (
-            <Text style={{ color: colors.foregroundMuted, fontSize: s(13), lineHeight: s(20) }}>
-              {duration ? `Duration ${duration}` : "Duration unavailable"}
-            </Text>
-          ) : null}
-        </View>
+        ) : (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: s(8),
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
+              <View
+                accessibilityElementsHidden
+                style={{
+                  width: s(9),
+                  height: s(9),
+                  borderRadius: s(5),
+                  backgroundColor: statusColor,
+                }}
+              />
+              <Text style={{ color: statusColor, fontSize: s(14), lineHeight: s(20) }}>
+                {statusLabel(run.status)} · {timing}
+              </Text>
+            </View>
+            {run.status !== "running" ? (
+              <Text style={{ color: colors.foregroundMuted, fontSize: s(13), lineHeight: s(20) }}>
+                {duration ? `Duration ${duration}` : "Duration unavailable"}
+              </Text>
+            ) : null}
+          </View>
+        )}
       </Pressable>
       <Pressable
         accessibilityRole="button"

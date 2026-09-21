@@ -8,6 +8,8 @@ type Run = BoardRun & {
 };
 export type ActiveAgent = PluginHookAgent & {
   project?: string;
+  pendingPermissions?: readonly unknown[];
+  attentionReason?: "finished" | "error" | "permission" | null;
   activeTurn?: { turnId: string; startedAt: string | null } | null;
 };
 
@@ -30,6 +32,7 @@ export function createRunStore(now = () => new Date().toISOString()) {
     return {
       ...metadata(agent),
       starred,
+      needsInput: false,
       title: title || "Untitled run",
       id: agent.id,
       providerTurnId: turnId,
@@ -41,6 +44,7 @@ export function createRunStore(now = () => new Date().toISOString()) {
   }
   function finish(run: Run, status: BoardRun["status"]) {
     run.status = status;
+    run.needsInput = false;
     run.endedAt = now();
     if (active.get(run.agentId) === run) active.delete(run.agentId);
     finished.unshift(run);
@@ -124,6 +128,8 @@ export function createRunStore(now = () => new Date().toISOString()) {
           run = make(agent, null, agent.activeTurn?.startedAt ?? null);
           active.set(agent.id, run);
         }
+        run.needsInput =
+          (agent.pendingPermissions?.length ?? 0) > 0 || agent.attentionReason === "permission";
         run.snapshotTurnId = snapshotId;
         run.startedAt = agent.activeTurn?.startedAt ?? run.startedAt;
         run.title = agent.title || run.title;

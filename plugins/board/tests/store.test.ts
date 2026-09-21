@@ -191,3 +191,23 @@ test("stars survive column changes and new turns; unstar and stale requests are 
   s.removeFinished(agent.id, scope, s.snapshot().runs[0].endedAt);
   assert.equal(s.setStarred(agent.id, scope, true), false);
 });
+
+test("input badge follows pending requests and clears after response or turn end", () => {
+  const s = setup();
+  s.reconcile([{ ...agent, pendingPermissions: [{}] }], s.revision);
+  assert.equal(s.snapshot().runs[0].needsInput, true);
+  s.reconcile([{ ...agent, pendingPermissions: [] }], s.revision);
+  assert.equal(s.snapshot().runs[0].needsInput, false);
+  s.reconcile([{ ...agent, attentionReason: "permission" }], s.revision);
+  assert.equal(s.snapshot().runs[0].needsInput, true);
+  s.end(agent, null, { kind: "completed" });
+  assert.equal(s.snapshot().runs[0].needsInput, false);
+});
+
+test("finished and error attention do not show the input badge", () => {
+  const s = setup();
+  for (const attentionReason of ["finished", "error"] as const) {
+    s.reconcile([{ ...agent, attentionReason }], s.revision);
+    assert.equal(s.snapshot().runs[0].needsInput, false);
+  }
+});
