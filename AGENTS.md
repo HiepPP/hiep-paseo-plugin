@@ -119,6 +119,20 @@ Require `running` with no load error and exercise the changed contribution. Relo
 local source; it does not require a Paseo rebuild. A failed reload stays failed: inspect the
 error and fix it. Never restart the main daemon to load plugin changes.
 
+For `Transport not connected (status: disconnected)` during plugin RPC, manually reload
+the affected plugin. Local `~/.zshrc` defines `prefresh` as `paseo plugin reload`:
+
+```sh
+prefresh <plugin-id>
+# Agents must load interactive zsh aliases; example:
+zsh -ic 'prefresh watchtower-board'
+```
+
+If the alias is unavailable, use `paseo plugin reload <plugin-id>` directly. Follow the
+typecheck gate above before reloading. Verify status, logs, and the failed action afterward;
+`running` alone does not prove RPC recovery. This is manual recovery, not a permanent
+transport fix. Do not restart the daemon or change Paseo source for this workaround.
+
 Directory installs depend on the source path remaining available. When moving a plugin,
 update its registration; installing under an already configured ID fails. The CLI's
 `plugin remove` removes registration, not source, so remove/reinstall can rebind the ID.

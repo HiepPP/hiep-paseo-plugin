@@ -217,14 +217,6 @@ export function mountSidebar(
   function render() {
     if (stopped) return;
     const snap = controller.get();
-    if (!snap) return;
-    if (!snap.state.spaces.some((s) => s.id === active)) {
-      const previous = previousOrder.slice(0, previousOrder.indexOf(active)).reverse();
-      active =
-        previous.find((id) => snap.state.spaces.some((s) => s.id === id)) ??
-        snap.state.spaces[0].id;
-    }
-    previousOrder = snap.state.spaces.map((s) => s.id);
     const nextScroll = doc.querySelector('[data-testid="sidebar-project-workspace-list-scroll"]');
     if (nextScroll !== scroll) {
       unbindWheel();
@@ -262,6 +254,25 @@ export function mountSidebar(
         unbindWheel = () => target.removeEventListener("wheel", listener);
       }
     }
+    if (!snap) {
+      const message = controller.getLoadError();
+      if (message && signature !== message) {
+        signature = message;
+        tabs.textContent = "";
+        error.textContent = `${message} Use Refresh to retry.`;
+        button(tabs, "Refresh", () => {
+          void controller.refresh();
+        });
+      }
+      return;
+    }
+    if (!snap.state.spaces.some((s) => s.id === active)) {
+      const previous = previousOrder.slice(0, previousOrder.indexOf(active)).reverse();
+      active =
+        previous.find((id) => snap.state.spaces.some((s) => s.id === id)) ??
+        snap.state.spaces[0].id;
+    }
+    previousOrder = snap.state.spaces.map((s) => s.id);
     const stamp = JSON.stringify([active, snap.state.spaces, snap.busy, snap.error]);
     if (stamp !== signature) {
       signature = stamp;

@@ -57,6 +57,7 @@ export function matchProject(key: string, projects: SidebarProject[]) {
 export function createSidebarController(client: Pick<PluginClientContext, "rpc">) {
   const contract = settingsRpc("spaces");
   let snapshot: SidebarSnapshot | null = null;
+  let loadError = "";
   let revision = "",
     stopped = false,
     loading = false;
@@ -75,6 +76,7 @@ export function createSidebarController(client: Pick<PluginClientContext, "rpc">
       if (stopped) return;
       if (saved.status !== "ready") throw new Error(saved.error);
       revision = saved.revision;
+      loadError = "";
       snapshot = {
         state: stateSchema.parse(saved.values),
         projects: catalog.projects,
@@ -82,8 +84,8 @@ export function createSidebarController(client: Pick<PluginClientContext, "rpc">
         error: "",
       };
     } catch (e) {
-      if (snapshot)
-        snapshot = { ...snapshot, error: e instanceof Error ? e.message : "Host unavailable" };
+      loadError = e instanceof Error ? e.message : "Host unavailable";
+      if (snapshot) snapshot = { ...snapshot, error: loadError };
     } finally {
       loading = false;
       emit();
@@ -115,6 +117,7 @@ export function createSidebarController(client: Pick<PluginClientContext, "rpc">
   }
   return {
     get: () => snapshot,
+    getLoadError: () => loadError,
     subscribe(fn: () => void) {
       listeners.add(fn);
       return () => {

@@ -32,6 +32,7 @@ function setup(html = fixture, moveSucceeded = true, thirdSpace = false) {
     stopped = false;
   const controller = {
     get: () => snapshot,
+    getLoadError: () => "",
     subscribe(fn: () => void) {
       listener = fn;
       return () => {
@@ -269,5 +270,50 @@ test("swipe on the stationary sidebar reaches empty Space 3 from Space 2", () =>
     );
   } finally {
     f.cleanup();
+  }
+});
+
+test("initial load failure shows Refresh without editable defaults, then restores saved spaces", async () => {
+  const { document } = parseHTML(fixture);
+  const saved = addSpace(stateSchema.parse({}));
+  let offline = true;
+  let writes = 0;
+  const controller = createSidebarController({
+    rpc: async (contract: { name: string }) => {
+      if (contract.name === "spaces.catalog") {
+        if (offline) throw new Error("Transport not connected");
+        return { projects: [] };
+      }
+      if (contract.name.endsWith(".read"))
+        return { status: "ready", revision: "saved-revision", values: saved };
+      writes++;
+      throw new Error("Unexpected write");
+    },
+  } as unknown as Parameters<typeof createSidebarController>[0]);
+  const cleanup = mountSidebar(
+    document as unknown as DomDocument,
+    () => ({ observe() {}, disconnect() {} }),
+    controller,
+  );
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    const bar = document.querySelector('[data-testid="spaces-sidebar-controls"]');
+    assert.ok(bar, "initial failure must not hide the sidebar controls");
+    assert.match(bar.querySelector('[role="status"]')!.textContent!, /Transport not connected/);
+    assert.equal(bar.querySelector('[role="tab"]'), null);
+    assert.equal(bar.querySelector('[aria-label="Create Space"]'), null);
+    assert.equal(document.querySelector("[data-paseo-space-hidden]"), null);
+    assert.equal(await controller.create(), false);
+    assert.equal(await controller.moveView("repo:p", "space-1"), false);
+    assert.equal(writes, 0);
+    offline = false;
+    bar.querySelector("button")!.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(bar.querySelector('[role="status"]')!.textContent, "");
+    assert.equal(bar.querySelectorAll('[role="tab"]').length, 2);
+    assert.deepEqual(controller.get()!.state, saved);
+    assert.equal(writes, 0);
+  } finally {
+    cleanup();
   }
 });
