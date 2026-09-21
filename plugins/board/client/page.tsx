@@ -5,9 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { boardRpc, removeRunRpc, starRunRpc, starredFirst, type BoardRun } from "../shared/board";
+import { BoardSizeControl } from "./size-control";
 import { boardConnectionState } from "./connection";
 
 const SECOND = 1_000;
+
+// Retain size across navigation without changing host appearance.
+let boardSize = 100;
 
 function timeValue(value: string | null): number | null {
   if (!value) return null;
@@ -65,7 +69,9 @@ function RunCard({
   onRemove,
   onOpen,
   onStar,
+  scale,
 }: {
+  scale: number;
   run: BoardRun;
   now: number;
   theme: PluginSurfaceProps["theme"];
@@ -77,6 +83,7 @@ function RunCard({
   const [starError, setStarError] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState(false);
+  const s = (value: number) => value * scale;
   const colors = theme.colors;
   const duration = runDuration(run, now);
   const statusColor =
@@ -99,9 +106,9 @@ function RunCard({
     <View
       accessibilityLabel={`${run.title}, ${statusLabel(run.status)}`}
       style={{
-        gap: 12,
-        padding: 18,
-        borderRadius: 12,
+        gap: s(12),
+        padding: s(18),
+        borderRadius: s(12),
         borderWidth: 1,
         borderColor: colors.border,
         backgroundColor: colors.surface1,
@@ -112,35 +119,35 @@ function RunCard({
         accessibilityLabel={`Open conversation ${run.title}`}
         disabled={!onOpen}
         onPress={() => onOpen?.(run.agentId)}
-        style={({ pressed }) => ({ gap: 12, opacity: pressed ? 0.7 : 1 })}
+        style={({ pressed }) => ({ gap: s(12), opacity: pressed ? 0.7 : 1 })}
       >
         <Text
           numberOfLines={2}
           style={{
             color: colors.foreground,
-            fontSize: 18,
-            lineHeight: 24,
+            fontSize: s(18),
+            lineHeight: s(24),
             fontWeight: "600",
-            paddingRight: 38,
+            paddingRight: s(38),
           }}
         >
           {run.title}
         </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
           <View
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
             style={{
-              width: 24,
-              height: 24,
-              borderRadius: 6,
+              width: s(24),
+              height: s(24),
+              borderRadius: s(6),
               backgroundColor: colors.accent,
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
             }}
           >
-            <Text style={{ color: colors.accentForeground, fontSize: 13, fontWeight: "700" }}>
+            <Text style={{ color: colors.accentForeground, fontSize: s(13), fontWeight: "700" }}>
               {Array.from(run.project.trim())[0]?.toUpperCase() ?? "?"}
             </Text>
           </View>
@@ -148,15 +155,15 @@ function RunCard({
             numberOfLines={1}
             style={{
               color: colors.foreground,
-              fontSize: 15,
-              lineHeight: 22,
+              fontSize: s(15),
+              lineHeight: s(22),
               fontWeight: "700",
               flexShrink: 1,
             }}
           >
             {run.project}
           </Text>
-          <Text style={{ color: colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>
+          <Text style={{ color: colors.foregroundMuted, fontSize: s(13), lineHeight: s(20) }}>
             · {run.provider}
           </Text>
         </View>
@@ -166,20 +173,25 @@ function RunCard({
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: 8,
+            gap: s(8),
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
             <View
               accessibilityElementsHidden
-              style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: statusColor }}
+              style={{
+                width: s(9),
+                height: s(9),
+                borderRadius: s(5),
+                backgroundColor: statusColor,
+              }}
             />
-            <Text style={{ color: statusColor, fontSize: 14, lineHeight: 20 }}>
+            <Text style={{ color: statusColor, fontSize: s(14), lineHeight: s(20) }}>
               {statusLabel(run.status)} · {timing}
             </Text>
           </View>
           {run.status !== "running" ? (
-            <Text style={{ color: colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>
+            <Text style={{ color: colors.foregroundMuted, fontSize: s(13), lineHeight: s(20) }}>
               {duration ? `Duration ${duration}` : "Duration unavailable"}
             </Text>
           ) : null}
@@ -203,10 +215,10 @@ function RunCard({
         }}
         style={{
           position: "absolute",
-          top: 8,
-          right: 8,
-          width: 44,
-          height: 44,
+          top: s(8),
+          right: s(8),
+          width: Math.max(44, s(44)),
+          height: Math.max(44, s(44)),
           alignItems: "center",
           justifyContent: "center",
           opacity: starring ? 0.5 : 1,
@@ -215,19 +227,19 @@ function RunCard({
         <Text
           style={{
             color: run.starred ? colors.statusWarning : colors.foregroundMuted,
-            fontSize: 24,
+            fontSize: s(24),
           }}
         >
           {run.starred ? "★" : "☆"}
         </Text>
       </Pressable>
       {starError ? (
-        <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: 13 }}>
+        <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: s(13) }}>
           Could not update star. Please retry.
         </Text>
       ) : null}
       {run.status !== "running" && onRemove ? (
-        <View style={{ alignItems: "flex-end", gap: 6 }}>
+        <View style={{ alignItems: "flex-end", gap: s(6) }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove ${run.title} from Board`}
@@ -244,19 +256,19 @@ function RunCard({
               }
             }}
             style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 8,
+              paddingHorizontal: s(12),
+              paddingVertical: s(8),
+              borderRadius: s(8),
               backgroundColor: colors.surface2,
               opacity: removing ? 0.5 : 1,
             }}
           >
-            <Text style={{ color: colors.foregroundMuted, fontSize: 13 }}>
+            <Text style={{ color: colors.foregroundMuted, fontSize: s(13) }}>
               {removing ? "Removing…" : "Remove"}
             </Text>
           </Pressable>
           {removeError ? (
-            <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: 13 }}>
+            <Text accessibilityRole="alert" style={{ color: colors.statusDanger, fontSize: s(13) }}>
               Could not remove. Please retry.
             </Text>
           ) : null}
@@ -275,7 +287,9 @@ function RunColumn({
   onRemove,
   onOpen,
   onStar,
+  scale,
 }: {
+  scale: number;
   title: string;
   runs: BoardRun[];
   now: number;
@@ -285,37 +299,45 @@ function RunColumn({
   onOpen?: (agentId: string) => void;
   onStar: (id: string, starred: boolean) => Promise<void>;
 }) {
+  const s = (value: number) => value * scale;
   const colors = theme.colors;
   return (
     <View
       style={{
         flex: 1,
         minWidth: 0,
-        gap: 14,
-        padding: 16,
-        borderRadius: 14,
+        gap: s(14),
+        padding: s(16),
+        borderRadius: s(14),
         borderWidth: 1,
         borderColor: colors.border,
         backgroundColor: colors.surface0,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <Text style={{ color: colors.foreground, fontSize: 20, lineHeight: 26, fontWeight: "600" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: s(10) }}>
+        <Text
+          style={{
+            color: colors.foreground,
+            fontSize: s(20),
+            lineHeight: s(26),
+            fontWeight: "600",
+          }}
+        >
           {title}
         </Text>
         <View
           accessibilityLabel={`${runs.length} runs`}
           style={{
-            minWidth: 30,
-            height: 26,
-            paddingHorizontal: 9,
+            minWidth: s(30),
+            height: s(26),
+            paddingHorizontal: s(9),
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: 13,
+            borderRadius: s(13),
             backgroundColor: colors.surface2,
           }}
         >
-          <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "600" }}>
+          <Text style={{ color: colors.foreground, fontSize: s(13), fontWeight: "600" }}>
             {runs.length}
           </Text>
         </View>
@@ -324,6 +346,7 @@ function RunColumn({
         runs.map((run) => (
           <RunCard
             key={run.id}
+            scale={scale}
             run={run}
             now={now}
             theme={theme}
@@ -335,16 +358,16 @@ function RunColumn({
       ) : (
         <View
           style={{
-            minHeight: 112,
+            minHeight: s(112),
             alignItems: "center",
             justifyContent: "center",
-            padding: 20,
-            borderRadius: 12,
+            padding: s(20),
+            borderRadius: s(12),
             borderWidth: 1,
             borderColor: colors.border,
           }}
         >
-          <Text style={{ color: colors.foregroundMuted, fontSize: 14, textAlign: "center" }}>
+          <Text style={{ color: colors.foregroundMuted, fontSize: s(14), textAlign: "center" }}>
             {emptyMessage}
           </Text>
         </View>
@@ -354,6 +377,12 @@ function RunColumn({
 }
 
 export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProps) {
+  const [size, setSize] = useState(boardSize);
+  const scale = size / 100;
+  const changeSize = (value: number) => {
+    boardSize = Math.max(10, Math.min(150, value));
+    setSize(boardSize);
+  };
   const readBoard = useRpc(boardRpc);
   const removeRun = useRpc(removeRunRpc);
   const setStarred = useRpc(starRunRpc);
@@ -390,6 +419,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
         ),
     [runs],
   );
+  const s = (value: number) => value * scale;
   const colors = theme.colors;
   const connection = boardConnectionState({
     hasData: Boolean(board.data),
@@ -426,185 +456,217 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
           : null;
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.surface0 }}
-      contentContainerStyle={{
-        flexGrow: 1,
-        padding: layout.compact ? 14 : 28,
-        gap: layout.compact ? 18 : 24,
-      }}
-    >
+    <View style={{ flex: 1, backgroundColor: colors.surface0 }}>
+      {/* Outside scaled scroll content so repeated clicks keep the same target. */}
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 16,
+          alignItems: "flex-end",
+          paddingHorizontal: layout.compact ? 14 : 28,
+          paddingTop: 14,
+          paddingBottom: 8,
         }}
       >
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text
-            accessibilityRole="header"
-            style={{
-              color: colors.foreground,
-              fontSize: layout.compact ? 28 : 34,
-              lineHeight: layout.compact ? 34 : 40,
-              fontWeight: "700",
-            }}
-          >
-            Board
-          </Text>
-          <Text style={{ color: colors.foregroundMuted, fontSize: 15, lineHeight: 22 }}>
-            Running and recently finished conversations
-          </Text>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 9 }}>
-          <View
-            accessibilityElementsHidden
-            style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: connectionColor }}
-          />
-          <Text
-            style={{
-              color: connection === "error" ? colors.statusDanger : colors.foreground,
-              fontSize: 14,
-            }}
-          >
-            {connectionLabel}
-          </Text>
-        </View>
+        <BoardSizeControl size={size} onChange={changeSize} theme={theme} />
       </View>
-
-      {initialLoading ? (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.surface0 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          padding: s(layout.compact ? 14 : 28),
+          gap: s(layout.compact ? 18 : 24),
+        }}
+      >
         <View
           style={{
-            flex: 1,
-            minHeight: 220,
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 12,
+            flexDirection: layout.compact ? "column" : "row",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: s(16),
           }}
         >
-          <ActivityIndicator color={colors.accent} />
-          <Text style={{ color: colors.foregroundMuted }}>Loading runs…</Text>
-        </View>
-      ) : unavailable ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            minHeight: 220,
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 14,
-            padding: 24,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface1,
-          }}
-        >
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "600" }}>
-            {connection === "offline" ? "Board is offline" : "Board is unavailable"}
-          </Text>
-          <Text style={{ color: colors.foregroundMuted, textAlign: "center", lineHeight: 21 }}>
-            {connection === "offline"
-              ? "Reconnect to the host, then retry."
-              : "Check the host connection, then retry."}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading Board"
-            disabled={board.isFetching}
-            onPress={() => void board.refetch()}
-            style={{
-              paddingHorizontal: 18,
-              paddingVertical: 11,
-              borderRadius: 8,
-              backgroundColor: colors.accent,
-            }}
-          >
-            <Text style={{ color: colors.accentForeground, fontWeight: "600" }}>
-              {board.isFetching ? "Retrying…" : "Retry"}
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          {snapshotWarning ? (
-            <View
-              accessibilityRole="alert"
+          <View style={{ flexGrow: 1, flexShrink: 1, gap: s(4) }}>
+            <Text
+              accessibilityRole="header"
               style={{
-                flexDirection: layout.compact ? "column" : "row",
-                alignItems: layout.compact ? "stretch" : "center",
-                justifyContent: "space-between",
-                gap: 10,
-                padding: 12,
-                borderRadius: 10,
-                borderWidth: 1,
-                borderColor: connectionColor,
+                color: colors.foreground,
+                fontSize: s(layout.compact ? 28 : 34),
+                lineHeight: s(layout.compact ? 34 : 40),
+                fontWeight: "700",
               }}
             >
-              <Text style={{ flex: 1, color: connectionColor, lineHeight: 20 }}>
-                {snapshotWarning}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                disabled={board.isFetching}
-                onPress={() => void board.refetch()}
+              Board
+            </Text>
+            <Text style={{ color: colors.foregroundMuted, fontSize: s(15), lineHeight: s(22) }}>
+              Running and recently finished conversations
+            </Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
+              <View
+                accessibilityElementsHidden
                 style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  borderRadius: 7,
-                  backgroundColor: colors.surface2,
+                  width: s(9),
+                  height: s(9),
+                  borderRadius: s(5),
+                  backgroundColor: connectionColor,
+                }}
+              />
+              <Text
+                style={{
+                  color: connection === "error" ? colors.statusDanger : colors.foreground,
+                  fontSize: s(14),
                 }}
               >
-                <Text style={{ color: colors.foreground, fontWeight: "600" }}>
-                  {board.isFetching ? "Retrying…" : "Retry"}
-                </Text>
-              </Pressable>
+                {connectionLabel}
+              </Text>
             </View>
-          ) : null}
+          </View>
+        </View>
+
+        {initialLoading ? (
           <View
             style={{
-              flexGrow: layout.compact ? 0 : 1,
-              flexDirection: layout.compact ? "column" : "row",
-              alignItems: "stretch",
-              gap: 16,
+              flex: 1,
+              minHeight: s(220),
+              alignItems: "center",
+              justifyContent: "center",
+              gap: s(12),
             }}
           >
-            <RunColumn
-              title="Running"
-              runs={running}
-              onStar={onStar}
-              now={now}
-              emptyMessage="No conversations are running."
-              theme={theme}
-              onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
-            />
-            <RunColumn
-              title="Just finished"
-              runs={finished}
-              onStar={onStar}
-              now={now}
-              emptyMessage="No finished conversations observed yet."
-              theme={theme}
-              onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
-              onRemove={async (id) => {
-                const result = await removeRun({
-                  id,
-                  observingSince: board.data!.observingSince,
-                  endedAt: finished.find((item) => item.id === id)?.endedAt ?? null,
-                });
-                if (!result.removed) throw new Error("Run changed. Refresh and retry.");
-                await board.refetch({ throwOnError: true });
-              }}
-            />
+            <ActivityIndicator color={colors.accent} />
+            <Text style={{ color: colors.foregroundMuted, fontSize: s(14) }}>Loading runs…</Text>
           </View>
-          <Text style={{ color: colors.foregroundMuted, fontSize: 12, lineHeight: 18 }}>
-            Last 50 finished conversations · observed since{" "}
-            {observedSinceLabel(board.data!.observingSince)}
-          </Text>
-        </>
-      )}
-    </ScrollView>
+        ) : unavailable ? (
+          <View
+            accessibilityRole="alert"
+            style={{
+              minHeight: s(220),
+              alignItems: "center",
+              justifyContent: "center",
+              gap: s(14),
+              padding: s(24),
+              borderRadius: s(14),
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface1,
+            }}
+          >
+            <Text style={{ color: colors.foreground, fontSize: s(18), fontWeight: "600" }}>
+              {connection === "offline" ? "Board is offline" : "Board is unavailable"}
+            </Text>
+            <Text
+              style={{
+                color: colors.foregroundMuted,
+                fontSize: s(14),
+                textAlign: "center",
+                lineHeight: s(21),
+              }}
+            >
+              {connection === "offline"
+                ? "Reconnect to the host, then retry."
+                : "Check the host connection, then retry."}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading Board"
+              disabled={board.isFetching}
+              onPress={() => void board.refetch()}
+              style={{
+                paddingHorizontal: s(18),
+                paddingVertical: s(11),
+                borderRadius: s(8),
+                backgroundColor: colors.accent,
+              }}
+            >
+              <Text style={{ color: colors.accentForeground, fontSize: s(14), fontWeight: "600" }}>
+                {board.isFetching ? "Retrying…" : "Retry"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            {snapshotWarning ? (
+              <View
+                accessibilityRole="alert"
+                style={{
+                  flexDirection: layout.compact ? "column" : "row",
+                  alignItems: layout.compact ? "stretch" : "center",
+                  justifyContent: "space-between",
+                  gap: s(10),
+                  padding: s(12),
+                  borderRadius: s(10),
+                  borderWidth: 1,
+                  borderColor: connectionColor,
+                }}
+              >
+                <Text
+                  style={{ flex: 1, color: connectionColor, fontSize: s(14), lineHeight: s(20) }}
+                >
+                  {snapshotWarning}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={board.isFetching}
+                  onPress={() => void board.refetch()}
+                  style={{
+                    paddingHorizontal: s(12),
+                    paddingVertical: s(8),
+                    borderRadius: s(7),
+                    backgroundColor: colors.surface2,
+                  }}
+                >
+                  <Text style={{ color: colors.foreground, fontSize: s(14), fontWeight: "600" }}>
+                    {board.isFetching ? "Retrying…" : "Retry"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <View
+              style={{
+                flexGrow: layout.compact ? 0 : 1,
+                flexDirection: layout.compact ? "column" : "row",
+                alignItems: "stretch",
+                gap: s(16),
+              }}
+            >
+              <RunColumn
+                scale={scale}
+                title="Running"
+                runs={running}
+                onStar={onStar}
+                now={now}
+                emptyMessage="No conversations are running."
+                theme={theme}
+                onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+              />
+              <RunColumn
+                scale={scale}
+                title="Just finished"
+                runs={finished}
+                onStar={onStar}
+                now={now}
+                emptyMessage="No finished conversations observed yet."
+                theme={theme}
+                onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+                onRemove={async (id) => {
+                  const result = await removeRun({
+                    id,
+                    observingSince: board.data!.observingSince,
+                    endedAt: finished.find((item) => item.id === id)?.endedAt ?? null,
+                  });
+                  if (!result.removed) throw new Error("Run changed. Refresh and retry.");
+                  await board.refetch({ throwOnError: true });
+                }}
+              />
+            </View>
+            <Text style={{ color: colors.foregroundMuted, fontSize: s(12), lineHeight: s(18) }}>
+              Last 50 finished conversations · observed since{" "}
+              {observedSinceLabel(board.data!.observingSince)}
+            </Text>
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
