@@ -1,6 +1,6 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
-import { ScrollView } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
@@ -9,6 +9,7 @@ import { boardColumns, type RunTree } from "../shared/tree";
 import { BoardSizeControl } from "./size-control";
 import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
+import { AgentAvatar } from "./avatar";
 
 const SECOND = 1_000;
 // Retain size across navigation without changing host appearance.
@@ -165,7 +166,7 @@ function RunCard({
 }: {
   /** Rendered inside a cluster card: no own border. */
   embedded?: boolean;
-  /** Child row under a parent: tighter, hairline-separated, no own surface. */
+  /** Compact two-line card inside the parent subagent panel. */
   subagent?: boolean;
   /** Hide the project row when the parent card already shows the same project. */
   inheritedProject?: boolean;
@@ -181,6 +182,7 @@ function RunCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const [starHovered, setStarHovered] = useState(false);
+  const [actionFocused, setActionFocused] = useState(false);
   const [removeHovered, setRemoveHovered] = useState(false);
   const [starring, setStarring] = useState(false);
   const [starError, setStarError] = useState(false);
@@ -214,9 +216,124 @@ function RunCard({
       ? `Remove all · ${removeCount}`
       : "Remove";
   const removeHint = others > 0 ? ` and ${others} ${others === 1 ? "subagent" : "subagents"}` : "";
-  const padX = s(subagent ? 12 : 16);
-  const padY = s(subagent ? 10 : 14);
+  const padX = s(subagent ? 8 : 16);
+  const padY = s(subagent ? 8 : 14);
   const showStar = run.starred || hovered || starHovered || starring;
+  const hoverActions =
+    Platform.OS === "web" &&
+    (globalThis as { matchMedia?: (query: string) => { matches: boolean } }).matchMedia?.(
+      "(hover: hover) and (pointer: fine)",
+    ).matches === true;
+  const actionsVisible =
+    !hoverActions ||
+    showStar ||
+    actionFocused ||
+    removeHovered ||
+    removing ||
+    starError ||
+    removeError;
+
+  const starButton = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${run.starred ? "Unstar" : "Star"} ${run.title}`}
+      accessibilityState={{ selected: run.starred, disabled: starring }}
+      disabled={starring}
+      onFocus={() => setActionFocused(true)}
+      onBlur={() => setActionFocused(false)}
+      onHoverIn={() => setStarHovered(true)}
+      onHoverOut={() => setStarHovered(false)}
+      onPress={async () => {
+        setStarring(true);
+        setStarError(false);
+        try {
+          await onStar(run.id, !run.starred);
+        } catch {
+          setStarError(true);
+        } finally {
+          setStarring(false);
+        }
+      }}
+      hitSlop={subagent && hoverActions ? 0 : s(8)}
+      style={{
+        width: s(subagent ? 24 : 28),
+        height: s(subagent ? 24 : 28),
+        marginTop: subagent ? 0 : -s(4),
+        marginRight: subagent ? 0 : -s(6),
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: s(CONTROL_RADIUS),
+        backgroundColor: starHovered && !starring ? colors.surface2 : "transparent",
+        // Unstarred stars stay quiet until the card is hovered; touch clients keep them visible.
+        opacity: starring ? 0.5 : subagent || showStar || actionFocused || !hoverActions ? 1 : 0.35,
+      }}
+    >
+      {run.starred ? (
+        <Text
+          accessible={false}
+          style={{
+            color: colors.statusWarning,
+            fontSize: s(subagent ? 16 : 20),
+            lineHeight: s(subagent ? 20 : 24),
+          }}
+        >
+          ★
+        </Text>
+      ) : (
+        <Icon
+          name="Star"
+          size={s(subagent ? 13 : 16)}
+          color={starHovered ? colors.statusWarning : colors.foregroundMuted}
+        />
+      )}
+    </Pressable>
+  );
+  const removeButton = onRemove ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Remove ${run.title}${removeHint} from Board`}
+      disabled={removing}
+      onFocus={() => setActionFocused(true)}
+      onBlur={() => setActionFocused(false)}
+      onHoverIn={() => setRemoveHovered(true)}
+      onHoverOut={() => setRemoveHovered(false)}
+      onPress={async () => {
+        setRemoving(true);
+        setRemoveError(false);
+        try {
+          await onRemove(run.id);
+        } catch {
+          setRemoveError(true);
+        } finally {
+          setRemoving(false);
+        }
+      }}
+      hitSlop={subagent ? 0 : s(6)}
+      style={{
+        paddingHorizontal: s(subagent ? 5 : 8),
+        paddingVertical: s(subagent ? 5 : 4),
+        marginVertical: subagent ? 0 : -s(4),
+        borderRadius: s(CONTROL_RADIUS - 2),
+        backgroundColor: removeHovered && !removing ? colors.surface2 : "transparent",
+        opacity: removing ? 0.5 : 1,
+      }}
+    >
+      {subagent ? (
+        <Icon name="X" size={s(14)} color={colors.foregroundMuted} />
+      ) : (
+        <Text
+          style={{
+            color: removeHovered && !removing ? colors.statusDanger : colors.foregroundMuted,
+            fontSize: s(12),
+            lineHeight: s(16),
+            fontWeight: "600",
+          }}
+        >
+          {removeLabel}
+        </Text>
+      )}
+    </Pressable>
+  ) : null;
 
   return (
     <View
@@ -224,7 +341,7 @@ function RunCard({
       style={{
         borderRadius: embedded ? 0 : s(subagent ? CARD_RADIUS - 2 : CARD_RADIUS),
         borderWidth: embedded ? 0 : 1,
-        borderColor: colors.border,
+        borderColor: subagent && run.needsInput ? colors.statusWarning : colors.border,
         backgroundColor: colors.surface1,
         overflow: "hidden",
       }}
@@ -232,6 +349,7 @@ function RunCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open conversation ${run.title}`}
+        accessibilityHint={`${run.project}, ${run.provider}, ${run.needsInput ? "Needs input" : statusLabel(run.status)}, ${timing}${duration ? `, duration ${duration}` : ""}`}
         disabled={!onOpen}
         onPress={() => onOpen?.(run.agentId)}
         onHoverIn={() => setHovered(true)}
@@ -251,211 +369,218 @@ function RunCard({
           gap: s(subagent ? 6 : 8),
         }}
       >
-        <View
-          pointerEvents="box-none"
-          style={{ flexDirection: "row", alignItems: "flex-start", gap: s(10) }}
-        >
-          <View pointerEvents="none" style={{ flex: 1, gap: s(subagent ? 4 : 6) }}>
-            <Text
-              numberOfLines={2}
-              style={{
-                color: colors.foreground,
-                fontSize: s(subagent ? 13.5 : 15),
-                lineHeight: s(subagent ? 19 : 21),
-                fontWeight: subagent ? "500" : "600",
-              }}
-            >
-              {run.title}
-            </Text>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: s(6), flexWrap: "wrap" }}
-            >
-              {subagent ? (
-                <Text
-                  style={{
-                    color: colors.foregroundMuted,
-                    fontSize: s(12),
-                    lineHeight: s(16),
-                    fontWeight: "500",
-                  }}
-                >
-                  Subagent
-                </Text>
-              ) : null}
+        {subagent ? (
+          <View
+            pointerEvents="box-none"
+            style={{ flexDirection: "row", alignItems: "center", gap: s(8), minHeight: s(42) }}
+          >
+            <View pointerEvents="none">
+              <AgentAvatar agentId={run.agentId} size={s(32)} />
+            </View>
+            <View pointerEvents="none" style={{ flex: 1, minWidth: 0, gap: s(3) }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: colors.foreground,
+                  fontSize: s(12),
+                  lineHeight: s(16),
+                  fontWeight: "600",
+                }}
+              >
+                {run.title}
+              </Text>
               {inheritedProject ? null : (
                 <Text
                   numberOfLines={1}
-                  style={{
-                    color: colors.foregroundMuted,
-                    fontSize: s(12),
-                    lineHeight: s(16),
-                    fontWeight: "500",
-                    flexShrink: 1,
-                  }}
+                  style={{ color: colors.foregroundMuted, fontSize: s(10), lineHeight: s(13) }}
                 >
                   {run.project}
                 </Text>
               )}
-              <Chip theme={theme} scale={scale}>
-                {run.provider}
-              </Chip>
-            </View>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${run.starred ? "Unstar" : "Star"} ${run.title}`}
-            accessibilityState={{ selected: run.starred, disabled: starring }}
-            disabled={starring}
-            onHoverIn={() => setStarHovered(true)}
-            onHoverOut={() => setStarHovered(false)}
-            onPress={async () => {
-              setStarring(true);
-              setStarError(false);
-              try {
-                await onStar(run.id, !run.starred);
-              } catch {
-                setStarError(true);
-              } finally {
-                setStarring(false);
-              }
-            }}
-            hitSlop={s(8)}
-            style={{
-              width: s(28),
-              height: s(28),
-              marginTop: -s(4),
-              marginRight: -s(6),
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: s(CONTROL_RADIUS),
-              backgroundColor: starHovered && !starring ? colors.surface2 : "transparent",
-              // Unstarred stars stay quiet until the card is hovered; touch clients keep them visible.
-              opacity: starring ? 0.5 : showStar || Platform.OS !== "web" ? 1 : 0.35,
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  run.starred || (starHovered && !starring)
-                    ? colors.statusWarning
-                    : colors.foregroundMuted,
-                fontSize: s(16),
-                lineHeight: s(20),
-              }}
-            >
-              {run.starred ? "★" : "☆"}
-            </Text>
-          </Pressable>
-        </View>
-        <View
-          pointerEvents="box-none"
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: s(8),
-          }}
-        >
-          <View
-            pointerEvents="none"
-            style={{ flexDirection: "row", alignItems: "center", gap: s(7), flexShrink: 1 }}
-          >
-            {run.needsInput ? (
-              <Text
-                style={{
-                  color: colors.surface1,
-                  backgroundColor: colors.statusWarning,
-                  fontSize: s(11.5),
-                  lineHeight: s(15),
-                  fontWeight: "700",
-                  paddingHorizontal: s(7),
-                  paddingVertical: s(2),
-                  borderRadius: s(CONTROL_RADIUS - 2),
-                  overflow: "hidden",
-                }}
-              >
-                Needs input
-              </Text>
-            ) : running ? (
-              <Spinner color={tone} size={s(14)} />
-            ) : (
-              <View
-                accessibilityElementsHidden
-                style={{ width: s(7), height: s(7), borderRadius: s(4), backgroundColor: tone }}
-              />
-            )}
-            <Text
-              numberOfLines={1}
-              style={{
-                color: run.needsInput ? colors.foregroundMuted : tone,
-                fontSize: s(12.5),
-                lineHeight: s(17),
-                fontWeight: "600",
-                flexShrink: 1,
-              }}
-            >
-              {run.needsInput ? timing : statusLabel(run.status)}
-              {run.needsInput ? null : (
-                <Text style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
-                  {"  "}
-                  {timing}
-                </Text>
-              )}
-            </Text>
-          </View>
-          {running ? null : (
-            <View
-              pointerEvents="box-none"
-              style={{ flexDirection: "row", alignItems: "center", gap: s(10) }}
-            >
-              <Text style={{ color: colors.foregroundMuted, fontSize: s(12), lineHeight: s(16) }}>
-                {duration ? `Ran ${duration}` : "Duration unavailable"}
-              </Text>
-              {onRemove ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${run.title}${removeHint} from Board`}
-                  disabled={removing}
-                  onHoverIn={() => setRemoveHovered(true)}
-                  onHoverOut={() => setRemoveHovered(false)}
-                  onPress={async () => {
-                    setRemoving(true);
-                    setRemoveError(false);
-                    try {
-                      await onRemove(run.id);
-                    } catch {
-                      setRemoveError(true);
-                    } finally {
-                      setRemoving(false);
-                    }
-                  }}
-                  hitSlop={s(6)}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: s(3), minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
                   style={{
-                    paddingHorizontal: s(8),
-                    paddingVertical: s(4),
-                    marginVertical: -s(4),
-                    borderRadius: s(CONTROL_RADIUS - 2),
-                    backgroundColor: removeHovered && !removing ? colors.surface2 : "transparent",
-                    opacity: removing ? 0.5 : 1,
+                    color: colors.foregroundMuted,
+                    fontSize: s(10),
+                    lineHeight: s(14),
+                    maxWidth: s(45),
+                    flexShrink: 1,
                   }}
                 >
+                  {run.provider}
+                </Text>
+                <Text style={{ color: colors.foregroundMuted, fontSize: s(10) }}>·</Text>
+                {running && !run.needsInput ? (
+                  <Spinner color={colors.foregroundMuted} size={s(12)} />
+                ) : (
+                  <Icon
+                    name={
+                      run.needsInput
+                        ? "CircleAlert"
+                        : run.status === "completed"
+                          ? "CircleCheck"
+                          : run.status === "failed"
+                            ? "CircleX"
+                            : "CircleHelp"
+                    }
+                    size={s(12)}
+                    color={tone}
+                  />
+                )}
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: colors.foregroundMuted,
+                    fontSize: s(10),
+                    lineHeight: s(14),
+                    flexShrink: 1,
+                  }}
+                >
+                  {run.needsInput ? "Needs input" : statusLabel(run.status)}
+                  {duration ? ` · ${duration}` : ""}
+                </Text>
+              </View>
+            </View>
+            <View
+              pointerEvents={actionsVisible ? "box-none" : "none"}
+              style={{
+                position: hoverActions ? "absolute" : "relative",
+                right: -s(4),
+                top: -s(4),
+                flexDirection: "row",
+                borderRadius: s(6),
+                backgroundColor: colors.surface1,
+                opacity: actionsVisible ? 1 : 0,
+              }}
+            >
+              {starButton}
+              {running ? null : removeButton}
+            </View>
+          </View>
+        ) : (
+          <>
+            <View
+              pointerEvents="box-none"
+              style={{ flexDirection: "row", alignItems: "flex-start", gap: s(10) }}
+            >
+              <View pointerEvents="none">
+                <AgentAvatar agentId={run.agentId} size={s(40)} />
+              </View>
+              <View pointerEvents="none" style={{ flex: 1, gap: s(6) }}>
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    color: colors.foreground,
+                    fontSize: s(15),
+                    lineHeight: s(21),
+                    fontWeight: "600",
+                  }}
+                >
+                  {run.title}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: s(6),
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {inheritedProject ? null : (
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: colors.foregroundMuted,
+                        fontSize: s(12),
+                        lineHeight: s(16),
+                        fontWeight: "500",
+                        flexShrink: 1,
+                      }}
+                    >
+                      {run.project}
+                    </Text>
+                  )}
+                  <Chip theme={theme} scale={scale}>
+                    {run.provider}
+                  </Chip>
+                </View>
+              </View>
+              {starButton}
+            </View>
+            <View
+              pointerEvents="box-none"
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: s(8),
+              }}
+            >
+              <View
+                pointerEvents="none"
+                style={{ flexDirection: "row", alignItems: "center", gap: s(7), flexShrink: 1 }}
+              >
+                {run.needsInput ? (
                   <Text
                     style={{
-                      color:
-                        removeHovered && !removing ? colors.statusDanger : colors.foregroundMuted,
-                      fontSize: s(12),
-                      lineHeight: s(16),
-                      fontWeight: "600",
+                      color: colors.surface1,
+                      backgroundColor: colors.statusWarning,
+                      fontSize: s(11.5),
+                      lineHeight: s(15),
+                      fontWeight: "700",
+                      paddingHorizontal: s(7),
+                      paddingVertical: s(2),
+                      borderRadius: s(CONTROL_RADIUS - 2),
+                      overflow: "hidden",
                     }}
                   >
-                    {removeLabel}
+                    Needs input
                   </Text>
-                </Pressable>
-              ) : null}
+                ) : running ? (
+                  <Spinner color={tone} size={s(14)} />
+                ) : (
+                  <View
+                    accessibilityElementsHidden
+                    style={{ width: s(7), height: s(7), borderRadius: s(4), backgroundColor: tone }}
+                  />
+                )}
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: run.needsInput ? colors.foregroundMuted : tone,
+                    fontSize: s(12.5),
+                    lineHeight: s(17),
+                    fontWeight: "600",
+                    flexShrink: 1,
+                  }}
+                >
+                  {run.needsInput ? timing : statusLabel(run.status)}
+                  {run.needsInput ? null : (
+                    <Text style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
+                      {"  "}
+                      {timing}
+                    </Text>
+                  )}
+                </Text>
+              </View>
+              {running ? null : (
+                <View
+                  pointerEvents="box-none"
+                  style={{ flexDirection: "row", alignItems: "center", gap: s(10) }}
+                >
+                  <Text
+                    style={{ color: colors.foregroundMuted, fontSize: s(12), lineHeight: s(16) }}
+                  >
+                    {duration ? `Ran ${duration}` : "Duration unavailable"}
+                  </Text>
+                  {removeButton}
+                </View>
+              )}
             </View>
-          )}
-        </View>
+          </>
+        )}
         {starError ? (
           <Text
             pointerEvents="none"
@@ -507,6 +632,7 @@ function RunCluster({ tree, compact, collapsed, onToggle, depth = 0, ...card }: 
   const s = (value: number) => value * scale;
   const expanded = !collapsed.has(tree.run.agentId);
   const [toggleHovered, setToggleHovered] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(0);
   // Remove cascades to subagents, so it waits until the whole cluster has finished.
   const onRemove = tree.running ? undefined : card.onRemove;
   if (!tree.children.length)
@@ -517,12 +643,11 @@ function RunCluster({ tree, compact, collapsed, onToggle, depth = 0, ...card }: 
     : summary.running
       ? colors.accent
       : null;
-  // Variant A: children sit on an inset panel; a rail with elbows leads into each mini card.
-  const edge = s(depth > 0 ? 12 : compact ? 12 : 16);
+  // Measure this panel so nested clusters and Board zoom use their actual available width.
+  const edge = s(depth > 0 || compact ? 6 : 8);
   const pad = s(8);
-  const gap = s(8);
-  const reach = s(14);
-  const elbowY = s(depth > 0 ? 20 : 22);
+  const gap = s(6);
+  const twoColumns = panelWidth >= s(406);
   return (
     <View
       style={{
@@ -622,66 +747,40 @@ function RunCluster({ tree, compact, collapsed, onToggle, depth = 0, ...card }: 
       </Pressable>
       {expanded ? (
         <View
+          onLayout={({ nativeEvent }) => setPanelWidth(nativeEvent.layout.width)}
           style={{
             marginHorizontal: edge,
             marginBottom: edge,
             padding: pad,
-            paddingLeft: pad + reach + s(8),
             gap,
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
             borderRadius: s(CARD_RADIUS - 2),
             borderWidth: 1,
             borderColor: colors.border,
             backgroundColor: colors.surface2,
           }}
         >
-          {tree.children.map((child, index) => {
-            const last = index === tree.children.length - 1;
-            return (
-              <View key={child.run.id}>
-                {/* Elbow: drops from the previous row, then turns into this card. */}
-                <View
-                  pointerEvents="none"
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                  style={{
-                    position: "absolute",
-                    left: -reach,
-                    top: -(index ? gap : pad),
-                    width: reach - s(3),
-                    height: (index ? gap : pad) + elbowY,
-                    borderLeftWidth: 1.5,
-                    borderBottomWidth: 1.5,
-                    borderBottomLeftRadius: s(8),
-                    borderColor: colors.border,
-                  }}
-                />
-                {last ? null : (
-                  <View
-                    pointerEvents="none"
-                    accessibilityElementsHidden
-                    importantForAccessibility="no-hide-descendants"
-                    style={{
-                      position: "absolute",
-                      left: -reach,
-                      top: elbowY,
-                      bottom: -gap,
-                      width: 1.5,
-                      backgroundColor: colors.border,
-                    }}
-                  />
-                )}
-                <RunCluster
-                  {...card}
-                  tree={child}
-                  compact={compact}
-                  collapsed={collapsed}
-                  onToggle={onToggle}
-                  depth={depth + 1}
-                  inheritedProject={child.run.projectKey === tree.run.projectKey}
-                />
-              </View>
-            );
-          })}
+          {tree.children.map((child) => (
+            <View
+              key={child.run.id}
+              style={{
+                width: twoColumns ? (panelWidth - pad * 2 - gap - 2) / 2 : "100%",
+                minWidth: 0,
+              }}
+            >
+              <RunCluster
+                {...card}
+                tree={child}
+                compact={compact}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                depth={depth + 1}
+                inheritedProject={child.run.projectKey === tree.run.projectKey}
+              />
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
@@ -813,12 +912,6 @@ function RunColumn({
       </View>
       {runs.length ? (
         <>
-          {sections.starred.length ? (
-            <View style={{ gap: s(8) }}>
-              {heading("Starred", null, colors.statusWarning)}
-              {sections.starred.map(renderCard)}
-            </View>
-          ) : null}
           {sections.projects.map((project) => (
             <View
               key={project.key}

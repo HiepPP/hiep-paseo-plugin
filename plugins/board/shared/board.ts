@@ -42,13 +42,8 @@ export function starredFirst(left: Pick<BoardRun, "starred">, right: Pick<BoardR
 }
 
 export function groupRuns(runs: readonly BoardRun[]) {
-  const starred: BoardRun[] = [];
   const projects = new Map<string, { key: string; name: string; runs: BoardRun[] }>();
   for (const run of runs) {
-    if (run.starred) {
-      starred.push(run);
-      continue;
-    }
     let group = projects.get(run.projectKey);
     if (!group) {
       group = { key: run.projectKey, name: run.project, runs: [] };
@@ -56,5 +51,6 @@ export function groupRuns(runs: readonly BoardRun[]) {
     }
     group.runs.push(run);
   }
-  return { starred, projects: [...projects.values()] };
+  for (const group of projects.values()) group.runs.sort(starredFirst);
+  return { projects: [...projects.values()] };
 }

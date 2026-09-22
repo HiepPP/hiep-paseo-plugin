@@ -7,13 +7,14 @@ import ts from "typescript";
 import type { BoardRun } from "../shared/board";
 import { buildRunTrees } from "../shared/tree";
 
-type Element = { type: string | ((props: any) => Element); props: any };
+type Element = { key?: string; type: string | ((props: any) => Element); props: any };
 const require = createRequire(import.meta.url);
 // Exercise real JSX and handlers with host primitives, without native bindings in Node.
 const source = readFileSync(new URL("../client/page.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(`${source}\nexport { RunCluster };`, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
+let measuredPanelWidth = 0;
 const exports: { RunCluster?: (props: any) => Element } = {};
 runInNewContext(compiled, {
   exports,
@@ -22,7 +23,15 @@ runInNewContext(compiled, {
     if (id === "react")
       return {
         ...require("react"),
-        useState: (initial: unknown) => [initial, () => {}],
+        useState: (initial: unknown) =>
+          typeof initial === "number"
+            ? [
+                measuredPanelWidth,
+                (width: number) => {
+                  measuredPanelWidth = width;
+                },
+              ]
+            : [initial, () => {}],
       };
     if (id === "react-native")
       return {
@@ -158,8 +167,9 @@ test("Remove on a finished cluster announces the cascade and waits for running s
   const button = (label: string) => nodes.find((node) => node.props.accessibilityLabel === label)!;
   const text = (value: string) => nodes.some((node) => node.props.children === value);
   assert.ok(text("Remove all · 3"));
-  assert.ok(text("Remove all · 2"));
-  assert.ok(text("Remove"));
+  // Compact children use icons; accessible names still announce the cascade scope.
+  assert.ok(button("Remove Child and 1 subagent from Board"));
+  assert.ok(button("Remove Leaf from Board"));
   await button("Remove Parent and 2 subagents from Board").props.onPress();
   await button("Remove Child and 1 subagent from Board").props.onPress();
   await button("Remove Leaf from Board").props.onPress();
@@ -171,4 +181,43 @@ test("Remove on a finished cluster announces the cascade and waits for running s
   assert.equal(button("Remove Child and 1 subagent from Board"), undefined);
   assert.ok(!text("Remove"));
   assert.ok(button("Open conversation Leaf"));
+});
+
+test("child grid responds to its own panel width and Board scale", () => {
+  measuredPanelWidth = 0;
+  const [tree] = buildRunTrees([
+    { ...base, id: "parent", agentId: "parent", title: "Parent" },
+    { ...base, id: "child", agentId: "child", parentAgentId: "parent", title: "Child" },
+    { ...base, id: "sibling", agentId: "sibling", parentAgentId: "parent", title: "Sibling" },
+  ]);
+  const props = {
+    tree,
+    compact: false,
+    collapsed: new Set<string>(),
+    scale: 1,
+    now: Date.now(),
+    theme,
+    onStar: async () => {},
+    onToggle: () => {},
+  };
+  const view = () => elements(render(exports.RunCluster!(props)));
+  let nodes = view();
+  const measure = (width: number) => {
+    nodes
+      .find((node) => node.props.onLayout)!
+      .props.onLayout({ nativeEvent: { layout: { width } } });
+    nodes = view();
+  };
+  const width = (id: string) => nodes.find((node) => node.key === id)!.props.style.width;
+  measure(440);
+  assert.equal(typeof width("child"), "number");
+  assert.equal(width("child"), width("sibling"));
+  assert.ok(width("child") * 2 < 440);
+  measure(320);
+  assert.equal(width("child"), "100%");
+  measure(440);
+  props.scale = 1.5;
+  nodes = view();
+  assert.equal(width("child"), "100%");
+  measuredPanelWidth = 0;
 });

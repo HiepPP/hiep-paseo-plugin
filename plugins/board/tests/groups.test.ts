@@ -20,14 +20,10 @@ test("groups by identity and preserves first appearance and card order without d
   const runs = [card("a", "one"), card("b", "two"), card("c", "one"), card("s", "two", true)];
   const result = groupRuns(runs);
   assert.deepEqual(
-    result.starred.map((r) => r.id),
-    ["s"],
-  );
-  assert.deepEqual(
     result.projects.map((g) => [g.key, g.runs.map((r) => r.id)]),
     [
       ["one", ["a", "c"]],
-      ["two", ["b"]],
+      ["two", ["s", "b"]],
     ],
   );
   assert.deepEqual(
@@ -39,13 +35,18 @@ test("groups by identity and preserves first appearance and card order without d
     groupRuns(runs).projects[1].runs.map((r) => r.id),
     ["b", "s"],
   );
-  assert.equal(groupRuns(runs).starred.length, 0);
 });
 
 test("empty and all-starred columns have no empty project groups", () => {
-  assert.deepEqual(groupRuns([]), { starred: [], projects: [] });
+  assert.deepEqual(groupRuns([]), { projects: [] });
   const runs = [card("a", "one", true), card("b", "two", true)];
-  assert.deepEqual(groupRuns(runs), { starred: runs, projects: [] });
+  assert.deepEqual(
+    groupRuns(runs).projects.map((g) => [g.key, g.runs.map((r) => r.id)]),
+    [
+      ["one", ["a"]],
+      ["two", ["b"]],
+    ],
+  );
 });
 
 test("host project identity and stars survive completion and a new hook-only turn", () => {
@@ -65,7 +66,7 @@ test("host project identity and stars survive completion and a new hook-only tur
   let runs = store.snapshot().runs;
   assert.equal(runs.length, 1);
   assert.equal(runs[0].status, "completed");
-  assert.equal(groupRuns(runs).starred[0].projectKey, "project:atlas");
+  assert.equal(groupRuns(runs).projects[0].runs[0].projectKey, "project:atlas");
   store.start(agent, "next");
   store.setStarred("a", scope, false);
   runs = store.snapshot().runs;
