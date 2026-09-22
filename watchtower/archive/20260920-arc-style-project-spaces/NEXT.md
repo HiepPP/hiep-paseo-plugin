@@ -4,8 +4,8 @@
 
 - Title: Desktop workspace plugins, Jev delegation, and prompt actions
 - Slug: 20260920-arc-style-project-spaces
-- Status: ACTIVE
-- Updated: 2026-09-21
+- Status: ARCHIVED
+- Updated: 2026-09-22
 
 ## Tracker
 
@@ -24,6 +24,7 @@
 | 11 | TASK-011 Dependency and ownership scheduler | J | DONE | [Spec](tasks/TASK-011-dependency-scheduler.md) | TASK-010 | [Context](CONTEXT.md) | Implemented; evidence in task outcome. |
 | 12 | TASK-012 Measured routing history | J | DONE | [Spec](tasks/TASK-012-routing-history.md) | TASK-011 | [Context](CONTEXT.md) | Direct benchmark: checks pass; 2.1253x tokens and 24.923% slower. |
 | 13 | TASK-013 Inline prompt Send and optional Jev auto-send | P | IN PROGRESS | [Spec](tasks/TASK-013-next-prompt-actions.md) | - | [Context](CONTEXT.md) | Desktop adapter authorized and installed; live acceptance in progress. |
+| 14 | TASK-014 Group Board conversations by project | A | BLOCKED | [Spec](tasks/TASK-014-board-project-groups.md) | TASK-006 | [Context](CONTEXT.md) | Implemented and reloaded; 27 tests pass. Remaining live acceptance needs test clients and states. |
 
 ## Plan Verify
 
@@ -38,10 +39,12 @@
 
 ## Handoff
 
+- TASK-014 code is installed. Finish the remaining live checks in its [outcome](tasks/TASK-014-outcome.md) before DONE.
+
 - TASK-013 desktop DOM adapter approved and installed. Complete live acceptance and record limitations.
 
 - TASK-007–012 complete: Jev orchestrator installed; 24 tests and real MCP/child execution verified.
-- [Live comparison](../plugins/jev-orchestrator/VERIFICATION.md): routed workflows passed but were slower on two small fixtures; no savings claim.
+- [Live comparison](../../../plugins/jev-orchestrator/VERIFICATION.md): routed workflows passed but were slower on two small fixtures; no savings claim.
 
 - Board is installed and running. Desktop light/dark, sidebar placement, and a real run transition are verified.
 - Board retains 50 observed finished conversations in memory. Native mobile acceptance remains unverified.
@@ -52,4 +55,6 @@
 
 ## Archive
 
-- [Optional plugins](archive/20260918-optional-paseo-plugins/NEXT.md)
+- [Optional plugins](../20260918-optional-paseo-plugins/NEXT.md)
+
+- Archived: 2026-09-22 -> [Archive](.).

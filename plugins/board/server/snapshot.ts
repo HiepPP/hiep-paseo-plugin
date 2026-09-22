@@ -17,6 +17,7 @@ export async function listRunning(paseo: Pick<PaseoApi, "agents">, signal: Abort
         workspaceId: agent.workspaceId ?? null,
         parentAgentId: null,
         project: project?.projectName,
+        projectKey: project?.projectKey,
       });
     }
     if (!page.pageInfo.hasMore) break;

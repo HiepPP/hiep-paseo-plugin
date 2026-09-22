@@ -5,9 +5,12 @@ type Run = BoardRun & {
   providerTurnId: string | null;
   snapshotTurnId: string | null;
   dismissed?: boolean;
+  cwd: string;
+  projectResolved: boolean;
 };
 export type ActiveAgent = PluginHookAgent & {
   project?: string;
+  projectKey?: string;
   pendingPermissions?: readonly unknown[];
   attentionReason?: "finished" | "error" | "permission" | null;
   activeTurn?: { turnId: string; startedAt: string | null } | null;
@@ -23,14 +26,25 @@ export function createRunStore(now = () => new Date().toISOString()) {
     title: agent.title || "Untitled run",
     project: agent.cwd.split(/[\\/]/).filter(Boolean).pop() || "Unknown project",
     provider: agent.provider,
+    projectKey: `cwd:${agent.cwd}`,
+    cwd: agent.cwd,
+    projectResolved: false,
   });
   function make(agent: PluginHookAgent, turnId: string | null, startedAt: string | null): Run {
     const previous = finished.findIndex((run) => run.agentId === agent.id);
     const title = agent.title || active.get(agent.id)?.title || finished[previous]?.title;
-    const starred = active.get(agent.id)?.starred ?? finished[previous]?.starred ?? false;
+    const prior = active.get(agent.id) ?? finished[previous];
+    const starred = prior?.starred ?? false;
     if (previous !== -1) finished.splice(previous, 1);
     return {
       ...metadata(agent),
+      ...(prior?.cwd === agent.cwd
+        ? {
+            project: prior.project,
+            projectKey: prior.projectKey,
+            projectResolved: prior.projectResolved,
+          }
+        : {}),
       starred,
       needsInput: false,
       title: title || "Untitled run",
@@ -53,6 +67,24 @@ export function createRunStore(now = () => new Date().toISOString()) {
   return {
     get revision() {
       return revision;
+    },
+    unresolvedProjects() {
+      return [...active.values(), ...finished]
+        .filter((run) => !run.dismissed && !run.projectResolved)
+        .map((run) => ({ agentId: run.agentId, cwd: run.cwd }));
+    },
+    updateProject(
+      agentId: string,
+      cwd: string,
+      project: { projectName: string; projectKey: string } | null,
+    ) {
+      const run = active.get(agentId) ?? finished.find((item) => item.agentId === agentId);
+      if (!run || run.cwd !== cwd) return;
+      if (project) {
+        run.project = project.projectName;
+        run.projectKey = `project:${project.projectKey}`;
+      }
+      run.projectResolved = true;
     },
     updateTitle(agentId: string, title: string | null) {
       if (!title) return;
@@ -134,6 +166,8 @@ export function createRunStore(now = () => new Date().toISOString()) {
         run.startedAt = agent.activeTurn?.startedAt ?? run.startedAt;
         run.title = agent.title || run.title;
         run.project = agent.project || run.project;
+        if (agent.projectKey) run.projectKey = `project:${agent.projectKey}`;
+        run.projectResolved = true;
       }
     },
     setStarred(id: string, scope: string, starred: boolean) {
@@ -154,7 +188,16 @@ export function createRunStore(now = () => new Date().toISOString()) {
     snapshot() {
       const runs = [...active.values(), ...finished]
         .filter((run) => !run.dismissed)
-        .map(({ providerTurnId: _p, snapshotTurnId: _s, dismissed: _d, ...run }) => run);
+        .map(
+          ({
+            providerTurnId: _p,
+            snapshotTurnId: _s,
+            dismissed: _d,
+            cwd: _c,
+            projectResolved: _r,
+            ...run
+          }) => run,
+        );
       return { runs, observingSince };
     },
     clear() {

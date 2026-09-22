@@ -24,10 +24,10 @@ How:
 
 Files:
 
-- [Plugin manifest](../../plugins/board/paseo-plugin.json), [package](../../plugins/board/package.json), [lockfile](../../plugins/board/package-lock.json), and [TypeScript config](../../plugins/board/tsconfig.json).
-- [Client entry](../../plugins/board/index.client.tsx) and [client modules](../../plugins/board/client/): page and navigation.
-- [Server entry](../../plugins/board/index.server.ts), [server modules](../../plugins/board/server/), and [shared contracts](../../plugins/board/shared/), only where required by verified APIs.
-- [Tests](../../plugins/board/tests/), [plugin README](../../plugins/board/README.md), and [root catalog](../../README.md).
+- [Plugin manifest](../../../../plugins/board/paseo-plugin.json), [package](../../../../plugins/board/package.json), [lockfile](../../../../plugins/board/package-lock.json), and [TypeScript config](../../../../plugins/board/tsconfig.json).
+- [Client entry](../../../../plugins/board/index.client.tsx) and [client modules](../../../../plugins/board/client): page and navigation.
+- [Server entry](../../../../plugins/board/index.server.ts), [server modules](../../../../plugins/board/server), and [shared contracts](../../../../plugins/board/shared), only where required by verified APIs.
+- [Tests](../../../../plugins/board/tests), [plugin README](../../../../plugins/board/README.md), and [root catalog](../../../../README.md).
 
 Expected result: Approved Board UI shows current runs and recent outcomes, with its menu immediately below Schedules.
 

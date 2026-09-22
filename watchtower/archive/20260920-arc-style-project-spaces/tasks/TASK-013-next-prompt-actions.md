@@ -42,10 +42,10 @@ How:
 
 Files:
 
-- [New plugin](../../plugins/next-prompt-actions/) contains its manifest, entries, client, server, shared contracts, tests, and README.
-- [Catalog](../../README.md) adds the plugin after implementation.
-- [Design concept](../designs/TASK-013-next-prompt-actions.png) shows desktop, narrow layout, and button states.
-- [Jev evaluator reference](../../plugins/jev-evaluator/README.md) defines evaluation behavior; read without changing it by default.
+- [New plugin](../../../../plugins/next-prompt-actions) contains its manifest, entries, client, server, shared contracts, tests, and README.
+- [Catalog](../../../../README.md) adds the plugin after implementation.
+- [Design concept](../../../designs/TASK-013-next-prompt-actions.png) shows desktop, narrow layout, and button states.
+- [Jev evaluator reference](../../../../plugins/jev-evaluator/README.md) defines evaluation behavior; read without changing it by default.
 
 Expected result: One click sends exactly one selected prompt to the correct conversation.
 With auto-send enabled, an eligible Jev-approved prompt runs without a click, within the bounded chain.

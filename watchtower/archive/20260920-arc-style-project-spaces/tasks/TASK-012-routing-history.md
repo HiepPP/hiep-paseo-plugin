@@ -18,8 +18,8 @@ How:
 
 Files:
 
-- [Plugin](../../plugins/jev-orchestrator/) contains server logic, shared contracts, MCP, panel, and tests.
-- [Catalog](../../README.md) describes installation and capabilities.
+- [Plugin](../../../../plugins/jev-orchestrator) contains server logic, shared contracts, MCP, panel, and tests.
+- [Catalog](../../../../README.md) describes installation and capabilities.
 
 Expected result: Persist bounded verified outcome metrics and compare live baseline and routed tasks.
 

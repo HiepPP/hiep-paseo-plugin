@@ -16,8 +16,8 @@ How:
 
 Files:
 
-- [Implementation](../../plugins/workspace-spaces/index.client.tsx) and focused tests under [tests](../../plugins/workspace-spaces/tests/).
-- [Plugin README](../../plugins/workspace-spaces/README.md) and [catalog](../../README.md).
+- [Implementation](../../../../plugins/workspace-spaces/index.client.tsx) and focused tests under [tests](../../../../plugins/workspace-spaces/tests).
+- [Plugin README](../../../../plugins/workspace-spaces/README.md) and [catalog](../../../../README.md).
 
 Expected result: Confirm surface, host settings, catalog, and workspace navigation support.
 

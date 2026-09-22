@@ -1,11 +1,11 @@
-# TASK-008 Adaptive escalation
+# TASK-009 Discovery before implementation
 
 Group: J (shared orchestrator engine, contracts, tests, and documentation)
 Class: risky
 
 ## Brief
 
-Goal: Classify failed attempts and select a different valid profile within a bounded attempt budget.
+Goal: Run a read-only discovery stage when task evidence is incomplete.
 
 Change: Add this capability to the standalone Jev orchestrator plugin without changing Paseo source.
 
@@ -18,13 +18,13 @@ How:
 
 Files:
 
-- [Plugin](../../plugins/jev-orchestrator/) contains server logic, shared contracts, MCP, panel, and tests.
-- [Catalog](../../README.md) describes installation and capabilities.
+- [Plugin](../../../../plugins/jev-orchestrator) contains server logic, shared contracts, MCP, panel, and tests.
+- [Catalog](../../../../README.md) describes installation and capabilities.
 
-Expected result: Classify failed attempts and select a different valid profile within a bounded attempt budget.
+Expected result: Run a read-only discovery stage when task evidence is incomplete.
 
 ## Verify
 
 - Run `npm --prefix plugins/jev-orchestrator run typecheck`, `run lint`, and `test`; all pass.
-- Test environment failures never trigger blind model escalation.
-- Test attempt limits, explicit profile preservation, unavailable profiles, and cancellation.
+- Test uncertain tasks enter discovery before implementation; clear tasks skip discovery.
+- Verify discovery evidence reaches the implementation child without changing the task scope.

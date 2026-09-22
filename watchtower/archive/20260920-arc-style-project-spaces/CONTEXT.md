@@ -25,16 +25,20 @@
 - Existing Spaces sidebar approval applies to Spaces only. Board must not assume private sidebar integration is approved.
 - Board uses standard sidebar registration; the installed desktop places it directly below Schedules without injection.
 - Board uses lifecycle outcomes and active snapshots. Recent history resets when the plugin stops or reloads.
+- TASK-014 groups unstarred cards by project within each existing status column.
+- Starred cards appear above all project groups in their column. Unstarring returns cards to their project.
+- The user requested TASK-014 implementation on 2026-09-22 using the [new concept](../../designs/TASK-014-board-project-groups.png).
+- Keep the current UI size control. Mockup chevrons do not require collapsible groups.
 
 ## References
 
 - TASK-013 adds inline Send for suggested prompts and optional Jev auto-run. The desktop plugin is implemented and installed.
-- [Prompt button concept](designs/next-step-prompts.png) uses synthetic text; the final UI places Send at the bottom right.
+- [Prompt button concept](../../designs/next-step-prompts.png) uses synthetic text; the final UI places Send at the bottom right.
 - TASK-013 must verify its own integration support. Earlier sidebar approval does not authorize a private timeline adapter.
 
 - [Arc Spaces](https://resources.arc.net/hc/en-us/articles/19228064149143-Spaces-Distinct-Browsing-Areas): bottom controls and horizontal swipes.
 - [Plugin reference](https://paseo.sh/docs/plugins/reference): surfaces, navigation, host settings, and runtime boundaries.
-- [Plugin](../plugins/workspace-spaces/README.md): implementation and supported behavior.
+- [Plugin](../../../plugins/workspace-spaces/README.md): implementation and supported behavior.
 
 ## Desktop integration
 

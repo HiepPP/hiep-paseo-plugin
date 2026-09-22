@@ -26,6 +26,19 @@ export default function contribute(server: PluginServerContext) {
         .then(async (agents) => {
           if (!controller.signal.aborted) store.reconcile(agents, revision);
           await Promise.all(
+            store.unresolvedProjects().map(async ({ agentId, cwd }) => {
+              // Placement enrichment must not hide the board when an agent is unavailable.
+              const current = await paseo.agents
+                .ref(agentId)
+                .refresh()
+                .catch(() => null);
+              if (!controller.signal.aborted && current) {
+                store.updateProject(agentId, cwd, current.project);
+                store.updateTitle(agentId, current.agent.title);
+              }
+            }),
+          );
+          await Promise.all(
             store
               .snapshot()
               .runs.filter((run) => run.title === "Untitled run")

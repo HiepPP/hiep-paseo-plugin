@@ -8,6 +8,7 @@ export const runSchema = z.object({
   starred: z.boolean(),
   needsInput: z.boolean().optional(),
   project: z.string(),
+  projectKey: z.string(),
   provider: z.string(),
   status: z.enum(["running", "completed", "failed", "cancelled", "unknown"]),
   startedAt: z.string().nullable(),
@@ -36,4 +37,22 @@ export const starRunRpc = defineRpc({
 
 export function starredFirst(left: Pick<BoardRun, "starred">, right: Pick<BoardRun, "starred">) {
   return Number(right.starred) - Number(left.starred);
+}
+
+export function groupRuns(runs: readonly BoardRun[]) {
+  const starred: BoardRun[] = [];
+  const projects = new Map<string, { key: string; name: string; runs: BoardRun[] }>();
+  for (const run of runs) {
+    if (run.starred) {
+      starred.push(run);
+      continue;
+    }
+    let group = projects.get(run.projectKey);
+    if (!group) {
+      group = { key: run.projectKey, name: run.project, runs: [] };
+      projects.set(run.projectKey, group);
+    }
+    group.runs.push(run);
+  }
+  return { starred, projects: [...projects.values()] };
 }

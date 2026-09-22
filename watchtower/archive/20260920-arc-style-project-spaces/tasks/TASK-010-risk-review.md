@@ -18,8 +18,8 @@ How:
 
 Files:
 
-- [Plugin](../../plugins/jev-orchestrator/) contains server logic, shared contracts, MCP, panel, and tests.
-- [Catalog](../../README.md) describes installation and capabilities.
+- [Plugin](../../../../plugins/jev-orchestrator) contains server logic, shared contracts, MCP, panel, and tests.
+- [Catalog](../../../../README.md) describes installation and capabilities.
 
 Expected result: Run an independent read-only review for risky changes and preserve deterministic verification.
 

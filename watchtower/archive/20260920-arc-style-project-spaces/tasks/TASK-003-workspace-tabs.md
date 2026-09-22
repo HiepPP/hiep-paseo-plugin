@@ -16,8 +16,8 @@ How:
 
 Files:
 
-- [Implementation](../../plugins/workspace-spaces/client/web.ts) and focused tests under [tests](../../plugins/workspace-spaces/tests/).
-- [Plugin README](../../plugins/workspace-spaces/README.md) and [catalog](../../README.md).
+- [Implementation](../../../../plugins/workspace-spaces/client/web.ts) and focused tests under [tests](../../../../plugins/workspace-spaces/tests).
+- [Plugin README](../../../../plugins/workspace-spaces/README.md) and [catalog](../../../../README.md).
 
 Expected result: Create and select numbered tabs inside the native desktop sidebar.
 

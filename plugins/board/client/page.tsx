@@ -4,7 +4,14 @@ import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { boardRpc, removeRunRpc, starRunRpc, starredFirst, type BoardRun } from "../shared/board";
+import {
+  boardRpc,
+  removeRunRpc,
+  starRunRpc,
+  starredFirst,
+  groupRuns,
+  type BoardRun,
+} from "../shared/board";
 import { BoardSizeControl } from "./size-control";
 import { boardConnectionState } from "./connection";
 
@@ -423,6 +430,19 @@ function RunColumn({
 }) {
   const s = (value: number) => value * scale;
   const colors = theme.colors;
+  const sections = groupRuns(runs);
+  const renderCard = (run: BoardRun) => (
+    <RunCard
+      key={run.id}
+      scale={scale}
+      run={run}
+      now={now}
+      theme={theme}
+      onRemove={onRemove}
+      onOpen={onOpen}
+      onStar={onStar}
+    />
+  );
   return (
     <View
       style={{
@@ -465,18 +485,61 @@ function RunColumn({
         </View>
       </View>
       {runs.length ? (
-        runs.map((run) => (
-          <RunCard
-            key={run.id}
-            scale={scale}
-            run={run}
-            now={now}
-            theme={theme}
-            onRemove={onRemove}
-            onOpen={onOpen}
-            onStar={onStar}
-          />
-        ))
+        <>
+          {sections.starred.length ? (
+            <View style={{ gap: s(12) }}>
+              <Text
+                accessibilityRole="header"
+                style={{ color: colors.foregroundMuted, fontSize: s(15), fontWeight: "600" }}
+              >
+                Starred
+              </Text>
+              {sections.starred.map(renderCard)}
+            </View>
+          ) : null}
+          {sections.projects.map((project) => (
+            <View
+              key={project.key}
+              style={{
+                gap: s(12),
+                padding: s(12),
+                borderRadius: s(12),
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.surface1,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={{
+                    color: colors.foreground,
+                    fontSize: s(16),
+                    fontWeight: "600",
+                    flexShrink: 1,
+                  }}
+                >
+                  {project.name}
+                </Text>
+                <Text
+                  accessibilityLabel={`${project.runs.length} unstarred conversations`}
+                  style={{
+                    color: colors.foregroundMuted,
+                    fontSize: s(13),
+                    backgroundColor: colors.surface2,
+                    paddingHorizontal: s(8),
+                    paddingVertical: s(3),
+                    borderRadius: s(12),
+                  }}
+                >
+                  {project.runs.length}
+                </Text>
+              </View>
+              {project.runs.map(renderCard)}
+            </View>
+          ))}
+        </>
       ) : (
         <View
           style={{

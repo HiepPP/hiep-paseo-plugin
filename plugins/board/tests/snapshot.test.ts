@@ -27,3 +27,22 @@ test("stopped plugin does not start an SDK request", async () => {
   controller.abort();
   await assert.rejects(listRunning({} as PaseoApi, controller.signal), /Board stopped/);
 });
+
+test("snapshot retains the host project key, including shared projects across workspaces", async () => {
+  const client = {
+    agents: {
+      list: async () => ({
+        entries: ["one", "two"].map((id) => ({
+          agent: { id, cwd: `/work/${id}`, workspaceId: id },
+          project: { projectName: "Atlas", projectKey: "atlas" },
+        })),
+        pageInfo: { hasMore: false },
+      }),
+    },
+  } as unknown as PaseoApi;
+  const rows = await listRunning(client, new AbortController().signal);
+  assert.deepEqual(
+    rows.map((row) => row.projectKey),
+    ["atlas", "atlas"],
+  );
+});

@@ -16,8 +16,8 @@ How:
 
 Files:
 
-- [Implementation](../../plugins/workspace-spaces/client/gesture.ts) and focused tests under [tests](../../plugins/workspace-spaces/tests/).
-- [Plugin README](../../plugins/workspace-spaces/README.md) and [catalog](../../README.md).
+- [Implementation](../../../../plugins/workspace-spaces/client/gesture.ts) and focused tests under [tests](../../../../plugins/workspace-spaces/tests).
+- [Plugin README](../../../../plugins/workspace-spaces/README.md) and [catalog](../../../../README.md).
 
 Expected result: Switch adjacent Spaces inside the native sidebar project list.
 

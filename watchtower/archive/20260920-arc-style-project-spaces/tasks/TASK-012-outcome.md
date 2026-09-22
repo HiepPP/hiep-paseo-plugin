@@ -10,7 +10,7 @@ Verified: All 24 tests, format, typecheck and lint pass. Final live pairs passed
 
 Effectiveness: Autonomous dispatch, phase transitions and checks work. Speed/cost improvement is not demonstrated; routed workflows were slower on these small fixtures. Escalation/scheduling branches have offline coverage; production calibration remains unmeasured.
 
-Evidence: [Full verification and preserved failures](../../plugins/jev-orchestrator/VERIFICATION.md).
+Evidence: [Full verification and preserved failures](../../../../plugins/jev-orchestrator/VERIFICATION.md).
 
 Cleanup: All 17 test agents and nine test-only local workspace records archived without deleting directories. Plugin remains running; ignored synthetic evidence retained.
 
@@ -28,7 +28,7 @@ All arms passed checks. Orchestrator used 5.06× and 11.16× the reported tokens
 Cache/reasoning breakdown for Jev is unavailable; total input/output coverage is complete.
 
 Eight benchmark agents and four test workspaces archived. No directory removal, commit or push.
-See the [verification report](../../plugins/jev-orchestrator/VERIFICATION.md) for per-component counts,
+See the [verification report](../../../../plugins/jev-orchestrator/VERIFICATION.md) for per-component counts,
 cache details, execution/accounting hashes, scope and preserved intermediate measurements.
 
 ## Direct model and effort benchmark
@@ -44,4 +44,4 @@ The source hash stayed unchanged during the run. No answers were discarded or re
 
 Conclusion: Direct routing works, but this policy does not meet the user's efficiency objective.
 Keep the fixed baseline for comparable tasks. Future ranking needs measured whole-workflow behavior.
-See [evidence and limitations](../../plugins/jev-orchestrator/VERIFICATION.md#direct-modeleffort-routing--2026-09-21).
+See [evidence and limitations](../../../../plugins/jev-orchestrator/VERIFICATION.md#direct-modeleffort-routing--2026-09-21).
