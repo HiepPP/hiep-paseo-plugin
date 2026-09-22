@@ -1,8 +1,12 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { boardRpc, removeRunRpc } from "../shared/board";
 
-export function installRemoveButtons(client: PluginClientContext) {
+export function installRemoveButtons(
+  client: PluginClientContext,
+  openParent: (agentId: string) => void,
+) {
   const buttons = new Map<string, PluginButtonRegistration>();
+  const parentButtons = new Map<string, PluginButtonRegistration>();
   const workspaces = new Map<string, string>();
   let stopped = false;
   let revision = 0;
@@ -10,15 +14,17 @@ export function installRemoveButtons(client: PluginClientContext) {
   const clear = () => {
     for (const button of buttons.values()) button.remove();
     buttons.clear();
+    for (const button of parentButtons.values()) button.remove();
+    parentButtons.clear();
     workspaces.clear();
   };
   async function refresh() {
     const currentRevision = revision;
     try {
       const snapshot = await client.rpc(boardRpc, {});
-      const finished = snapshot.runs.filter((run) => run.status !== "running");
+      const eligible = snapshot.runs.filter((run) => run.status !== "running" || run.parentAgentId);
       const entries = await Promise.all(
-        finished.map(async (run) => {
+        eligible.map(async (run) => {
           let workspaceId = workspaces.get(run.id);
           if (!workspaceId) {
             const agent = await client.paseo.agents.ref(run.agentId).refresh();
@@ -28,7 +34,25 @@ export function installRemoveButtons(client: PluginClientContext) {
         }),
       );
       if (stopped || currentRevision !== revision) return;
-      const ids = new Set(entries.filter((entry) => entry.workspaceId).map(({ run }) => run.id));
+      const ids = new Set(
+        entries
+          .filter(({ run, workspaceId }) => workspaceId && run.status !== "running")
+          .map(({ run }) => run.id),
+      );
+      const childIds = new Set(
+        entries
+          .filter(
+            ({ run, workspaceId }) =>
+              workspaceId && run.parentAgentId && run.parentAgentId !== run.agentId,
+          )
+          .map(({ run }) => run.id),
+      );
+      for (const [id, button] of parentButtons) {
+        if (!childIds.has(id)) {
+          button.remove();
+          parentButtons.delete(id);
+        }
+      }
       for (const [id, button] of buttons) {
         if (!ids.has(id)) {
           button.remove();
@@ -39,6 +63,32 @@ export function installRemoveButtons(client: PluginClientContext) {
       for (const { run, workspaceId } of entries) {
         if (!workspaceId) continue;
         workspaces.set(run.id, workspaceId);
+        if (childIds.has(run.id)) {
+          const parentButton = {
+            title: "Jump To Parent",
+            label: "Jump To Parent",
+            icon: "CornerLeftUp",
+            behavior: {
+              kind: "action" as const,
+              onPress() {
+                openParent(run.parentAgentId!);
+              },
+            },
+          };
+          const existing = parentButtons.get(run.id);
+          if (existing) existing.update(parentButton);
+          else
+            parentButtons.set(
+              run.id,
+              client.addComposerPill({
+                id: `parent-${run.id}`,
+                workspaceId,
+                agentId: run.agentId,
+                button: parentButton,
+              }),
+            );
+        }
+        if (run.status === "running") continue;
         const button = {
           title: "Remove from Board",
           label: "Remove",

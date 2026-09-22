@@ -1,4 +1,5 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { installParentNavigation } from "./client/parent";
 import { installRemoveButtons } from "./client/remove";
 import { installRemovePlacement } from "./client/web";
 import { BoardPage } from "./client/page";
@@ -14,10 +15,12 @@ export default function contribute(client: PluginClientContext) {
   });
   const shortcut = installBoardShortcut(() => client.openSurface("board"));
   const removePlacement = installRemovePlacement();
-  const removeButtons = installRemoveButtons(client);
+  const parent = installParentNavigation(client);
+  const removeButtons = installRemoveButtons(client, parent.open);
   return () => {
     removePlacement();
     removeButtons();
+    parent.cleanup();
     shortcut();
     sidebar();
     surface();

@@ -39,7 +39,7 @@ test("only finished threads get Remove; navigate only after confirmed removal; c
       opens++;
     },
   } as unknown as PluginClientContext;
-  const cleanup = installRemoveButtons(client);
+  const cleanup = installRemoveButtons(client, () => {});
   try {
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual([...pills.keys()], ["finished"]);
@@ -77,11 +77,69 @@ test("cleanup discards an in-flight snapshot without registering buttons", async
       assert.fail("registered after cleanup");
     },
   } as unknown as PluginClientContext;
-  const cleanup = installRemoveButtons(client);
+  const cleanup = installRemoveButtons(client, () => {});
   cleanup();
   resolve({
     observingSince: "scope",
     runs: [{ id: "finished", agentId: "finished", status: "completed" }],
   });
   await new Promise((done) => setImmediate(done));
+});
+
+test("running and finished children jump to their direct parent without removing conversations", async () => {
+  const pills = new Map<string, PluginComposerPillContribution>();
+  const opened: string[] = [];
+  const client = {
+    async rpc(contract: unknown) {
+      assert.equal(contract, boardRpc);
+      return {
+        observingSince: "scope",
+        runs: [
+          { id: "root", agentId: "root", status: "completed" },
+          { id: "child", agentId: "child", status: "running", parentAgentId: "root" },
+          { id: "leaf", agentId: "leaf", status: "completed", parentAgentId: "child" },
+          { id: "self", agentId: "self", status: "running", parentAgentId: "self" },
+        ],
+      };
+    },
+    paseo: {
+      agents: { ref: () => ({ refresh: async () => ({ agent: { workspaceId: "workspace" } }) }) },
+    },
+    addComposerPill(pill: PluginComposerPillContribution) {
+      pills.set(pill.id, pill);
+      return {
+        update() {},
+        remove() {
+          pills.delete(pill.id);
+        },
+      };
+    },
+    openSurface() {
+      assert.fail("must not return to Board");
+    },
+  } as unknown as PluginClientContext;
+  const cleanup = installRemoveButtons(client, (id) => {
+    opened.push(id);
+  });
+  try {
+    await new Promise((done) => setImmediate(done));
+    assert.deepEqual([...pills.keys()].sort(), [
+      "parent-child",
+      "parent-leaf",
+      "remove-leaf",
+      "remove-root",
+    ]);
+    for (const id of ["parent-child", "parent-leaf"]) {
+      const pill = pills.get(id)!;
+      assert.equal(pill.button.label, "Jump To Parent");
+      assert.equal(pill.workspaceId, "workspace");
+      assert.equal(pill.button.behavior.kind, "action");
+      if (pill.button.behavior.kind === "action") await pill.button.behavior.onPress();
+    }
+    assert.deepEqual(opened, ["root", "child"]);
+    assert.equal(pills.size, 4);
+  } finally {
+    cleanup();
+  }
+  assert.equal(pills.size, 0);
 });

@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 interface Element {
   parentElement: Element | null;
+  offsetHeight: number;
   lastElementChild: Element | null;
   isConnected: boolean;
   textContent: string | null;
@@ -33,7 +34,9 @@ export function installRemovePlacement() {
   if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
   const css = document.createElement("style");
   css.textContent =
-    '[data-testid^="workspace-pane-"] [role="button"][aria-label="Remove from Board"]:not([data-board-remove-copy]){display:none!important}';
+    '[data-testid^="workspace-pane-"] [role="button"]:is([aria-label="Remove from Board"],[aria-label="Jump To Parent"]):not([data-board-remove-copy]){display:none!important}' +
+    "[data-board-parent-copy], [data-board-parent-copy] *{color:#f97316!important}" +
+    "[data-board-parent-copy]{border-color:#f97316!important}";
   document.head.appendChild(css);
   const copies = new Map<Element, Element>();
   function sync() {
@@ -44,7 +47,7 @@ export function installRemovePlacement() {
       }
     }
     for (const source of document.querySelectorAll(
-      '[role="button"][aria-label="Remove from Board"]',
+      '[role="button"]:is([aria-label="Remove from Board"],[aria-label="Jump To Parent"] )',
     )) {
       if (source.getAttribute("data-board-remove-copy")) continue;
       const pane = source.closest('[data-testid^="workspace-pane-"]');
@@ -58,6 +61,8 @@ export function installRemovePlacement() {
       if (!copy) {
         copy = source.cloneNode(true);
         copy.setAttribute("data-board-remove-copy", "true");
+        if (source.getAttribute("aria-label") === "Jump To Parent")
+          copy.setAttribute("data-board-parent-copy", "true");
         copy.style.cssText += ";position:absolute;top:12px;right:12px;z-index:10;margin:0;";
         const activate = (event: Event) => {
           event.preventDefault();
@@ -70,6 +75,12 @@ export function installRemovePlacement() {
         });
         tab.appendChild(copy);
         copies.set(source, copy);
+      }
+      if (source.getAttribute("aria-label") === "Jump To Parent") {
+        const remove = [
+          ...tab.querySelectorAll('[data-board-remove-copy][aria-label="Remove from Board"]'),
+        ][0];
+        copy.style.cssText += `;top:${remove ? 12 + remove.offsetHeight + 8 : 12}px;`;
       }
       const disabled = source.getAttribute("aria-disabled") === "true";
       if (copy.getAttribute("aria-disabled") !== String(disabled)) {
