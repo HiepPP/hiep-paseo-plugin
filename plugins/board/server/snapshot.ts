@@ -1,3 +1,4 @@
+import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { PaseoApi } from "@getpaseo/client";
 import type { ActiveAgent } from "./store";
 
@@ -15,7 +16,7 @@ export async function listRunning(paseo: Pick<PaseoApi, "agents">, signal: Abort
       agents.push({
         ...agent,
         workspaceId: agent.workspaceId ?? null,
-        parentAgentId: null,
+        parentAgentId: getParentAgentIdFromLabels(agent.labels),
         project: project?.projectName,
         projectKey: project?.projectKey,
       });

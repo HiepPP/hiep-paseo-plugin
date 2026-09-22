@@ -23,6 +23,7 @@ export function createRunStore(now = () => new Date().toISOString()) {
   let revision = 0;
   const metadata = (agent: PluginHookAgent) => ({
     agentId: agent.id,
+    parentAgentId: agent.parentAgentId,
     title: agent.title || "Untitled run",
     project: agent.cwd.split(/[\\/]/).filter(Boolean).pop() || "Unknown project",
     provider: agent.provider,
@@ -99,6 +100,7 @@ export function createRunStore(now = () => new Date().toISOString()) {
         ((existing.providerTurnId ?? existing.snapshotTurnId) === null ||
           (existing.providerTurnId ?? existing.snapshotTurnId) === turnId)
       ) {
+        existing.parentAgentId = agent.parentAgentId;
         existing.providerTurnId = turnId;
         return;
       }
@@ -132,6 +134,7 @@ export function createRunStore(now = () => new Date().toISOString()) {
         }
         run = make(agent, turnId, null);
       }
+      run.parentAgentId = agent.parentAgentId;
       run.providerTurnId = turnId;
       run.title = agent.title || run.title;
       finish(run, outcome.kind === "canceled" ? "cancelled" : outcome.kind);
@@ -162,6 +165,7 @@ export function createRunStore(now = () => new Date().toISOString()) {
         }
         run.needsInput =
           (agent.pendingPermissions?.length ?? 0) > 0 || agent.attentionReason === "permission";
+        run.parentAgentId = agent.parentAgentId;
         run.snapshotTurnId = snapshotId;
         run.startedAt = agent.activeTurn?.startedAt ?? run.startedAt;
         run.title = agent.title || run.title;
@@ -183,6 +187,19 @@ export function createRunStore(now = () => new Date().toISOString()) {
       if (!run || run.endedAt !== endedAt) return false;
       // Retain bounded metadata so repeated terminal events cannot restore a removed card.
       run.dismissed = true;
+      // Finished subagents leave with their parent; a running subagent keeps its own subtree.
+      const visible = finished.filter((item) => !item.dismissed);
+      const queue = [run.agentId];
+      const seen = new Set(queue);
+      while (queue.length) {
+        const parentId = queue.shift()!;
+        for (const child of visible) {
+          if (child.parentAgentId !== parentId || seen.has(child.agentId)) continue;
+          seen.add(child.agentId);
+          child.dismissed = true;
+          queue.push(child.agentId);
+        }
+      }
       return true;
     },
     snapshot() {

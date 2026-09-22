@@ -4,6 +4,7 @@ import { z } from "zod";
 export const runSchema = z.object({
   id: z.string(),
   agentId: z.string(),
+  parentAgentId: z.string().nullable().optional(),
   title: z.string(),
   starred: z.boolean(),
   needsInput: z.boolean().optional(),

@@ -33,7 +33,12 @@ test("snapshot retains the host project key, including shared projects across wo
     agents: {
       list: async () => ({
         entries: ["one", "two"].map((id) => ({
-          agent: { id, cwd: `/work/${id}`, workspaceId: id },
+          agent: {
+            id,
+            cwd: `/work/${id}`,
+            workspaceId: id,
+            labels: id === "two" ? { "paseo.parent-agent-id": "one" } : {},
+          },
           project: { projectName: "Atlas", projectKey: "atlas" },
         })),
         pageInfo: { hasMore: false },
@@ -41,6 +46,10 @@ test("snapshot retains the host project key, including shared projects across wo
     },
   } as unknown as PaseoApi;
   const rows = await listRunning(client, new AbortController().signal);
+  assert.deepEqual(
+    rows.map((row) => row.parentAgentId),
+    [null, "one"],
+  );
   assert.deepEqual(
     rows.map((row) => row.projectKey),
     ["atlas", "atlas"],

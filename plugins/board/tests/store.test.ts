@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { PluginHookAgent } from "@getpaseo/plugin/server";
+
 import { createRunStore } from "../server/store";
+test("parent relationship survives bootstrap, hooks, completion and new turns", () => {
+  const store = createRunStore();
+  const child = { ...agent, parentAgentId: "parent" };
+  store.reconcile([child], store.revision);
+  assert.equal(store.snapshot().runs[0].parentAgentId, "parent");
+  store.start(child, "first");
+  store.end(child, "first", { kind: "completed" });
+  assert.equal(store.snapshot().runs[0].parentAgentId, "parent");
+  store.start(child, "second");
+  assert.equal(store.snapshot().runs[0].parentAgentId, "parent");
+  store.reconcile([{ ...child, parentAgentId: "updated" }], store.revision);
+  assert.equal(store.snapshot().runs[0].parentAgentId, "updated");
+});
 
 const agent = {
   id: "demo",
@@ -210,4 +225,76 @@ test("finished and error attention do not show the input badge", () => {
     s.reconcile([{ ...agent, attentionReason }], s.revision);
     assert.equal(s.snapshot().runs[0].needsInput, false);
   }
+});
+
+const family = {
+  parent: { ...agent, id: "parent" },
+  child: { ...agent, id: "child", parentAgentId: "parent" },
+  grandchild: { ...agent, id: "grandchild", parentAgentId: "child" },
+};
+function finish(s: ReturnType<typeof setup>, ...members: PluginHookAgent[]) {
+  for (const member of members) {
+    s.start(member, "t");
+    s.end(member, "t", { kind: "completed" });
+  }
+}
+
+test("removing a parent also removes its finished subagents; guards remove nothing", () => {
+  const s = setup();
+  finish(s, family.grandchild, family.child, family.parent);
+  const { observingSince, runs } = s.snapshot();
+  const endedAt = runs.find((run) => run.id === "parent")!.endedAt;
+  assert.equal(s.removeFinished("parent", "stale", endedAt), false);
+  assert.equal(s.removeFinished("parent", observingSince, "wrong"), false);
+  assert.equal(s.snapshot().runs.length, 3);
+  assert.equal(s.removeFinished("parent", observingSince, endedAt), true);
+  assert.deepEqual(s.snapshot().runs, []);
+});
+
+test("a running subagent and its own subtree stay visible when the parent is removed", () => {
+  const s = setup();
+  finish(s, family.parent, family.grandchild);
+  s.start(family.child, "t");
+  const { observingSince, runs } = s.snapshot();
+  const endedAt = runs.find((run) => run.id === "parent")!.endedAt;
+  assert.equal(s.removeFinished("parent", observingSince, endedAt), true);
+  assert.deepEqual(
+    s
+      .snapshot()
+      .runs.map((run) => [run.id, run.status])
+      .sort(),
+    [
+      ["child", "running"],
+      ["grandchild", "completed"],
+    ],
+  );
+  s.end(family.child, "t", { kind: "completed" });
+  assert.deepEqual(
+    s
+      .snapshot()
+      .runs.map((run) => run.id)
+      .sort(),
+    ["child", "grandchild"],
+  );
+});
+
+test("removing a subagent keeps its parent and removes only its own subtree", () => {
+  const s = setup();
+  finish(s, family.parent, family.child, family.grandchild);
+  const { observingSince, runs } = s.snapshot();
+  const endedAt = runs.find((run) => run.id === "child")!.endedAt;
+  assert.equal(s.removeFinished("child", observingSince, endedAt), true);
+  assert.deepEqual(
+    s.snapshot().runs.map((run) => run.id),
+    ["parent"],
+  );
+});
+
+test("malformed parent cycles cannot make removal loop", () => {
+  const s = setup();
+  finish(s, { ...agent, id: "a", parentAgentId: "b" }, { ...agent, id: "b", parentAgentId: "a" });
+  const { observingSince, runs } = s.snapshot();
+  const endedAt = runs.find((run) => run.id === "a")!.endedAt;
+  assert.equal(s.removeFinished("a", observingSince, endedAt), true);
+  assert.deepEqual(s.snapshot().runs, []);
 });
