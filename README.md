@@ -3,7 +3,7 @@
 See what your agents are doing. Keep projects organized. Bring task context and
 workspace checks into Paseo without leaving your conversation.
 
-Seven independent local plugins. Install only what you need; each owns its
+Eight independent local plugins. Install only what you need; each owns its
 dependencies, checks, and configuration.
 
 ## See every conversation at a glance
@@ -81,6 +81,7 @@ for client support and limitations, including Spaces' private desktop adapter.
 
 | Plugin | Purpose |
 | --- | --- |
+| [vscode-warm-light](plugins/vscode-warm-light/README.md) | Apply the warm, customized VS Code Light+ palette through Paseo's theme API. |
 | [next-prompt-actions](plugins/next-prompt-actions/README.md) | Send next-step prompts inside their blocks on desktop, with optional bounded Jev auto-run. |
 | [jev-orchestrator](plugins/jev-orchestrator/README.md) | Direct Jev model/effort routing to one agent, plus optional scoped delegation with discovery, escalation, review, and ownership locks. |
 | [Board](plugins/board/README.md) | Show one card per Paseo conversation with its latest running or finished state. |

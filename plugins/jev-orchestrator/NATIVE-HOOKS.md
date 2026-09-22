@@ -157,6 +157,19 @@ child**: if Codex later rejects the spawn, the ticket stays consumed. Do not aut
 a new ID. `native_delegation_status` reports evaluator usage, elapsed evaluation time and ticket state;
 `consumed` is not task completion. Plugin reload, scope revocation or policy changes invalidate tickets.
 
+### Routing failure recovery
+
+`Paseo daemon transport disconnected` means the plugin's SDK connection failed, not a bad Jev
+policy. After the plugin checks pass, run `paseo plugin reload jev-orchestrator`, verify its status
+and logs, then create a fresh Paseo parent and verify `prepare_native_delegate` there. Do not
+restart the daemon. Reload revokes existing parent bindings and tickets; it cannot repair an old
+parent's injected MCP URL/token. `session binding expired or invalid` also requires a fresh parent.
+
+`bridge unreachable` requires checking plugin availability. `ticket rejected` means the bridge
+responded but rejected the operation: inspect `native_delegation_status`, the request contract,
+workspace, policy, expiry and remaining slots. Never retry a failed task with a new request ID.
+Unknown internal errors remain redacted; no failure allows delegation through.
+
 Task text is sent to Jev and held in a local role file with mode 0600, outside Git. Parent archival
 removes its known role slots. Reload/crash preserves files to avoid breaking running children, so
 orphan slots may need explicit cleanup after those children finish. They may appear in later native

@@ -42,7 +42,21 @@ export function createBridge(
         result = { cancelled: await engine.cancel(lease.parentId, input.id) };
       else throw new Error("Unknown action.");
       response.end(JSON.stringify(result));
-    } catch {
+    } catch (error) {
+      // Expose only a known transport failure, never arbitrary SDK errors or task data.
+      if (
+        error instanceof Error &&
+        /^Transport not connected(?: \(status: [a-z_]+\))?$/.test(error.message)
+      ) {
+        response.writeHead(503).end(
+          JSON.stringify({
+            code: "daemon_disconnected",
+            error:
+              "Paseo daemon transport disconnected. Run paseo plugin reload jev-orchestrator, then create a fresh Paseo agent. Do not restart the daemon.",
+          }),
+        );
+        return;
+      }
       response
         .writeHead(400)
         .end(

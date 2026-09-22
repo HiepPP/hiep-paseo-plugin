@@ -410,3 +410,23 @@ children were independently verified as Luna/max. Mean direct Astra/low baseline
 Whole-workflow tokens include parent, child, approval guardian and evaluator. Jev used 1,411 tokens
 and about 1.54 s per run. No quality improvement was observed; this task's token/time goal failed.
 No result-guided reruns or product-source edits. Agents archived and role slots cleaned.
+
+## Native routing recovery — 2026-09-22
+
+The reported failed session returned the generic native-hook denial while `native_status`
+returned HTTP 400 and `direct.profiles` reported `Transport not connected (status: disconnected)`.
+The bridge and hook now distinguish SDK disconnection, invalid session binding, unreachable
+bridge and rejected ticket using fixed, redacted messages. Authorization remains fail-closed.
+This is diagnostic correction plus operational recovery, not a permanent SDK reconnect fix.
+
+Regression: `node --import tsx --test --test-name-pattern='real command hook' tests/native-tickets.test.ts`
+failed against the old generic message, then passed. `npm run format`, `npm run typecheck`,
+`npm run lint`, `npm test` (66/66), and `git diff --check` passed.
+
+`paseo plugin reload jev-orchestrator` completed; status was `running`, and the log recorded
+`Plugin ready` at 2026-09-22T04:29:24.404Z. Fresh smoke parent
+`8b6bf454-f693-45f0-8c19-74003fe7e09d`, Codex session
+`01a0c760-6c76-7f80-af83-adccc64b48d0`, called preflight once. Its actual tool result reports
+`action:self`, `state:self`, `gpt-6-astra/low`, one Jev request, 840 evaluator tokens and 1,359 ms.
+This verifies post-reload preflight, not post-reload child spawning. The smoke parent was archived.
+Existing parents retain stale bindings after reload and require fresh sessions.

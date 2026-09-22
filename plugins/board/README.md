@@ -1,7 +1,7 @@
 # Board
 
 Paseo conversation board. The Board sidebar item opens Running and Just finished columns.
-Requires Paseo daemon and client 0.8.x. Uses standard plugin surfaces, sidebar registration, RPCs, and lifecycle hooks.
+Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin surfaces, sidebar registration, RPCs, and lifecycle hooks.
 
 ## Behavior
 

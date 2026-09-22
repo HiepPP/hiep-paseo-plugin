@@ -14,7 +14,7 @@ Clicking tabs also works. The main chat stays open and running agents are untouc
 
 ## Implementation and limits
 
-Requires Paseo daemon and app 0.8.x. No keys or configuration required.
+Supports Paseo daemon and app 0.8.x and 0.9.0-beta.2. No keys or configuration required.
 This desktop-only adapter uses private DOM identifiers, not a supported sidebar extension API.
 It adds its own controls and CSS attributes; it does not edit Paseo source, binaries, project paths,
 Git worktrees, workspace identities, or agents. App updates may require selector changes.

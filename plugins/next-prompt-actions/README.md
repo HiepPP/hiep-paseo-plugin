@@ -10,7 +10,7 @@ Captured from Paseo desktop 0.8.0 using synthetic sample text.
 
 ## Compatibility
 
-Paseo 0.8 desktop only. The user approved this private DOM adapter; it does not edit Paseo source.
+Paseo 0.8.x and 0.9.0-beta.2 desktop only. The user approved this private DOM adapter; it does not edit Paseo source.
 It reads native Markdown markers and React ancestor props for host, workspace, message, and agent identity.
 Unknown shapes, partial streams, incomplete history, stale messages, and wrong hosts fail closed.
 Browser and native mobile clients receive no DOM contribution.

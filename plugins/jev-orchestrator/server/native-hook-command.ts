@@ -23,12 +23,13 @@ const manifestSchema = z.strictObject({
     .max(128),
 });
 
-const deny = () => ({
+const deny = (
+  reason = "Jev native routing unavailable: check the reviewed policy and agent definitions.",
+) => ({
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
-    permissionDecisionReason:
-      "Jev native routing unavailable: check the reviewed policy and agent definitions.",
+    permissionDecisionReason: reason,
   },
 });
 
@@ -67,6 +68,7 @@ export async function runNativeHookCommand(input: unknown, manifestPath: string,
 }
 
 async function main() {
+  let failureReason: string | undefined;
   const manifestPath = process.env.PASEO_JEV_NATIVE_POLICY;
   const runtime = process.env.PASEO_JEV_NATIVE_RUNTIME;
   if (!manifestPath && !runtime) {
@@ -139,6 +141,8 @@ async function main() {
       )
         throw new Error("Missing ticket binding.");
       const intent = event.tool_name === "mcp__jev_orchestrator__prepare_native_delegate";
+      failureReason =
+        "Jev native bridge unreachable. Check jev-orchestrator plugin status; after a plugin reload, create a fresh Paseo agent. Do not restart the daemon.";
       const response = await fetch(url, {
         method: "POST",
         redirect: "error",
@@ -149,7 +153,21 @@ async function main() {
           input: { sessionId: event.session_id, cwd: event.cwd, input: event.tool_input },
         }),
       });
-      if (!response.ok) throw new Error("Ticket rejected.");
+      if (!response.ok) {
+        failureReason =
+          response.status === 403
+            ? "Jev native session binding expired or invalid. Create a fresh Paseo agent; old tickets cannot be reused."
+            : "Jev native ticket rejected. Check native_delegation_status, request contract, workspace, policy, expiry and remaining slots. Do not retry with a new request ID.";
+        if (response.status === 503) {
+          const error = await response.json().catch(() => null);
+          if (error?.code === "daemon_disconnected")
+            failureReason =
+              "Jev native routing unavailable: Paseo daemon transport disconnected. Run paseo plugin reload jev-orchestrator, then create a fresh Paseo agent. Do not restart the daemon.";
+        }
+        throw new Error("Ticket rejected.");
+      }
+      failureReason =
+        "Jev native bridge returned an invalid response. Check jev-orchestrator plugin logs.";
       const result = await response.json();
       process.stdout.write(JSON.stringify(intent ? {} : result) + "\n");
       return;
@@ -162,7 +180,7 @@ async function main() {
     const result = await runNativeHookCommand(event, manifestPath, createJudge(configFile, root));
     process.stdout.write(JSON.stringify(result) + "\n");
   } catch {
-    process.stdout.write(JSON.stringify(deny()) + "\n");
+    process.stdout.write(JSON.stringify(deny(failureReason)) + "\n");
   } finally {
     clearTimeout(timer);
   }

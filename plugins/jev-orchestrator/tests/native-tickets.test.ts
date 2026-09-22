@@ -181,9 +181,13 @@ test("failure has no fallback/re-evaluation, and three slots are never recycled"
 
 test("real command hook registers root intent and consumes over the scoped bridge", async () => {
   const f = await fixture(choose);
+  let scopeError: Error | undefined;
   const bridge = createBridge(
     {} as Engine,
-    async () => ({ cwd: f.root }),
+    async () => {
+      if (scopeError) throw scopeError;
+      return { cwd: f.root };
+    },
     (action, parent, cwd, input) => f.tickets.handle(action, parent, cwd, input),
   );
   const token = bridge.issue(f.root);
@@ -238,6 +242,22 @@ test("real command hook registers root intent and consumes over the scoped bridg
       );
     });
   try {
+    scopeError = new Error("Transport not connected (status: disconnected)");
+    const disconnected = await hook("mcp__jev_orchestrator__prepare_native_delegate", f.input);
+    assert.equal(disconnected.hookSpecificOutput.permissionDecision, "deny");
+    assert.match(
+      disconnected.hookSpecificOutput.permissionDecisionReason,
+      /daemon transport disconnected/,
+    );
+    assert.match(
+      disconnected.hookSpecificOutput.permissionDecisionReason,
+      /paseo plugin reload jev-orchestrator/,
+    );
+    scopeError = new Error("private internal error must not escape");
+    const rejected = await hook("mcp__jev_orchestrator__prepare_native_delegate", f.input);
+    assert.match(rejected.hookSpecificOutput.permissionDecisionReason, /ticket rejected/);
+    assert.doesNotMatch(JSON.stringify(rejected), /private internal/);
+    scopeError = undefined;
     assert.deepEqual(await hook("mcp__jev_orchestrator__prepare_native_delegate", f.input), {});
     const res = await fetch(url, {
       method: "POST",
@@ -260,6 +280,7 @@ test("real command hook registers root intent and consumes over the scoped bridg
       (await hook("collaborationspawn_agent", input)).hookSpecificOutput.permissionDecision,
       "deny",
     );
+    const rootTranscript = await readFile(transcript, "utf8");
     await writeFile(
       transcript,
       JSON.stringify({
@@ -276,6 +297,15 @@ test("real command hook registers root intent and consumes over the scoped bridg
       ).hookSpecificOutput.permissionDecision,
       "deny",
     );
+    await writeFile(transcript, rootTranscript);
+    bridge.revoke("parent");
+    const revoked = await hook("mcp__jev_orchestrator__prepare_native_delegate", f.input);
+    assert.equal(revoked.hookSpecificOutput.permissionDecision, "deny");
+    assert.match(revoked.hookSpecificOutput.permissionDecisionReason, /session binding expired/);
+    bridge.close();
+    const offline = await hook("mcp__jev_orchestrator__prepare_native_delegate", f.input);
+    assert.equal(offline.hookSpecificOutput.permissionDecision, "deny");
+    assert.match(offline.hookSpecificOutput.permissionDecisionReason, /bridge unreachable/);
   } finally {
     bridge.close();
     await f.cleanup();

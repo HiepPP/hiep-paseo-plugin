@@ -1,6 +1,6 @@
 {
   "name": "next-prompt-actions",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,9 @@
     "format": "oxfmt index.server.ts index.client.tsx client server shared tests README.md package.json tsconfig.json paseo-plugin.json"
   },
   "devDependencies": {
-    "@getpaseo/client": "0.8.0",
-    "@getpaseo/plugin": "0.8.0",
-    "@getpaseo/protocol": "0.8.0",
+    "@getpaseo/client": "0.9.0-beta.2",
+    "@getpaseo/plugin": "0.9.0-beta.2",
+    "@getpaseo/protocol": "0.9.0-beta.2",
     "@tanstack/react-query": "^5.90.11",
     "@types/node": "^22.0.0",
     "@types/react": "~19.2.0",
