@@ -1,8 +1,8 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { useRpc } from "@getpaseo/plugin/client";
+import { useRpc, useSettings } from "@getpaseo/plugin/client";
 import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import {
   boardRpc,
@@ -13,10 +13,10 @@ import {
   type BoardRun,
 } from "../shared/board";
 import { BoardSizeControl } from "./size-control";
+import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
 
 const SECOND = 1_000;
-
 // Retain size across navigation without changing host appearance.
 let boardSize = 100;
 
@@ -408,6 +408,7 @@ function RunCard({
 }
 
 function RunColumn({
+  projectPalette,
   title,
   runs,
   now,
@@ -419,6 +420,7 @@ function RunColumn({
   scale,
 }: {
   scale: number;
+  projectPalette: Record<string, number>;
   title: string;
   runs: BoardRun[];
   now: number;
@@ -505,11 +507,45 @@ function RunColumn({
                 padding: s(12),
                 borderRadius: s(12),
                 borderWidth: 1,
-                borderColor: colors.border,
+                borderColor:
+                  project.runs[0].projectId &&
+                  projectPalette[project.runs[0].projectId] !== undefined
+                    ? `hsl(${projectPalette[project.runs[0].projectId]}, 65%, 72%)`
+                    : colors.border,
                 backgroundColor: colors.surface1,
               }}
             >
+              <View
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: s(12),
+                  backgroundColor:
+                    project.runs[0].projectId &&
+                    projectPalette[project.runs[0].projectId] !== undefined
+                      ? `hsl(${projectPalette[project.runs[0].projectId]}, 65%, 72%)`
+                      : colors.border,
+                  opacity: 0.2,
+                }}
+              />
               <View style={{ flexDirection: "row", alignItems: "center", gap: s(8) }}>
+                <View
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  style={{
+                    width: s(10),
+                    height: s(10),
+                    borderRadius: s(5),
+                    backgroundColor:
+                      project.runs[0].projectId &&
+                      projectPalette[project.runs[0].projectId] !== undefined
+                        ? `hsl(${projectPalette[project.runs[0].projectId]}, 65%, 72%)`
+                        : colors.border,
+                  }}
+                />
                 <Text
                   accessibilityRole="header"
                   numberOfLines={1}
@@ -562,6 +598,8 @@ function RunColumn({
 }
 
 export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProps) {
+  const palette = useSettings(projectColors);
+  const savingPalette = useRef(false);
   const [size, setSize] = useState(boardSize);
   const scale = size / 100;
   const changeSize = (value: number) => {
@@ -589,6 +627,21 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
     await board.refetch({ throwOnError: true });
   };
   const runs = board.data?.runs ?? [];
+  useEffect(() => {
+    if (palette.status !== "ready" || palette.saving || palette.saveError || savingPalette.current)
+      return;
+    const next = allocateColors(
+      palette.values.hues,
+      runs.flatMap((run) => (run.projectId ? [run.projectId] : [])),
+    );
+    if (next === palette.values.hues) return;
+    savingPalette.current = true;
+    void palette.save({ hues: next }, palette.revision).finally(() => {
+      savingPalette.current = false;
+    });
+  }, [palette, board.dataUpdatedAt]);
+  const projectPalette = palette.status === "ready" ? palette.values.hues : {};
+
   const running = useMemo(
     () => runs.filter((run) => run.status === "running").sort(starredFirst),
     [runs],
@@ -709,6 +762,13 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
           </View>
         </View>
 
+        {palette.status === "error" || palette.status === "invalid" || palette.saveError ? (
+          <Pressable accessibilityRole="button" onPress={() => void palette.reload()}>
+            <Text style={{ color: colors.statusWarning }}>
+              Could not save project colors. Tap to retry.
+            </Text>
+          </Pressable>
+        ) : null}
         {initialLoading ? (
           <View
             style={{
@@ -816,6 +876,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
               }}
             >
               <RunColumn
+                projectPalette={projectPalette}
                 scale={scale}
                 title="Running"
                 runs={running}
@@ -826,6 +887,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
               />
               <RunColumn
+                projectPalette={projectPalette}
                 scale={scale}
                 title="Just finished"
                 runs={finished}

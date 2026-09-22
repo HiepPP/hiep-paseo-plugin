@@ -1,9 +1,11 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { projectColors } from "./shared/project-colors";
 import { createRunStore } from "./server/store";
 import { listRunning } from "./server/snapshot";
 import { boardRpc, removeRunRpc, starRunRpc } from "./shared/board";
 
 export default function contribute(server: PluginServerContext) {
+  server.registerSettings(projectColors);
   const store = createRunStore();
   const controller = new AbortController();
   const removeStart = server.on("agent.turn_started", ({ agent, turnId }) =>
@@ -55,7 +57,15 @@ export default function contribute(server: PluginServerContext) {
         });
     }
     await pending;
-    return store.snapshot();
+    const { projects } = await paseo.projects.list();
+    const ids = new Map(
+      projects.map((project) => [`project:${project.projectId}`, project.projectId]),
+    );
+    const snapshot = store.snapshot();
+    return {
+      ...snapshot,
+      runs: snapshot.runs.map((run) => ({ ...run, projectId: ids.get(run.projectKey) })),
+    };
   });
   return () => {
     controller.abort();

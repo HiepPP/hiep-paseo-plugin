@@ -9,6 +9,7 @@ export const runSchema = z.object({
   needsInput: z.boolean().optional(),
   project: z.string(),
   projectKey: z.string(),
+  projectId: z.string().optional(),
   provider: z.string(),
   status: z.enum(["running", "completed", "failed", "cancelled", "unknown"]),
   startedAt: z.string().nullable(),
