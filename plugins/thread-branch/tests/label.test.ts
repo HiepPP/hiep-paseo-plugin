@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { pillLabel, pillTitle } from "../client/label";
-import { describePrPill } from "../client/buttons";
+import { describePrPill, describeRepoPill } from "../client/buttons";
 import type { BranchInfo } from "../shared/branch";
 
 const base: BranchInfo = {
@@ -14,6 +14,7 @@ const base: BranchInfo = {
   ahead: null,
   behind: null,
   pr: null,
+  remoteUrl: null,
   prLookup: "ok",
 };
 
@@ -57,4 +58,14 @@ test("PR pill is a one-click action, hidden without a pull request", () => {
   assert.equal(withPr.visible, true);
   assert.equal(withPr.label, "#7");
   assert.equal(withPr.behavior.kind, "action");
+});
+
+test("repo pill shows the repository name and hides without a web remote", () => {
+  const open = async () => {};
+  assert.equal(describeRepoPill(base, open).visible, false);
+  const pill = describeRepoPill({ ...base, remoteUrl: "https://github.com/o/r" }, open);
+  assert.equal(pill.visible, true);
+  assert.equal(pill.label, "r");
+  assert.equal(pill.icon, "Github");
+  assert.equal(pill.title, "Open https://github.com/o/r");
 });

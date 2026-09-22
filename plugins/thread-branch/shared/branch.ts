@@ -18,6 +18,8 @@ export const branchInfoSchema = z.object({
   ahead: z.number().int().nonnegative().nullable(),
   behind: z.number().int().nonnegative().nullable(),
   pr: pullRequestSchema.nullable(),
+  /** Browser URL of the `origin` remote, or null when there is none or it is not http/ssh. */
+  remoteUrl: z.string().nullable(),
   /** Why `pr` is null when a lookup could not run: gh missing, not a GitHub remote, or lookup failed. */
   prLookup: z.enum(["ok", "unavailable", "failed", "skipped"]),
 });

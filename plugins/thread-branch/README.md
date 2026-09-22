@@ -2,7 +2,8 @@
 
 Shows the current git branch of each conversation's working directory as a composer pill,
 beside Tasks and Subagents. When the branch has a pull request, a second pill `#42` appears;
-one click opens it in the system browser.
+one click opens it in the system browser. A third pill named after the `origin` repository opens
+its web page (GitHub, GitLab, or any http/ssh remote).
 
 The branch pill menu offers **Copy branch name** and **Refresh**.
 A detached HEAD shows `@<short sha>`. Non-git directories show no pill.

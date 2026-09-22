@@ -62,6 +62,25 @@ export function parsePullRequest(output: string): BranchInfo["pr"] {
   }
 }
 
+/** Turns an `origin` remote into a browser URL: ssh/scp-style and https forms, `.git` stripped. */
+export function parseRemoteUrl(output: string): string | null {
+  const raw = output.trim();
+  if (!raw) return null;
+  let host: string;
+  let path: string;
+  const scp = raw.match(/^(?:[\w.-]+@)?([\w.-]+):(?!\/\/)(.+)$/);
+  const url = raw.match(/^(?:https?|ssh|git):\/\/(?:[^@/]+@)?([\w.-]+)(?::\d+)?\/(.+)$/);
+  if (url) [host, path] = [url[1], url[2]];
+  else if (scp) [host, path] = [scp[1], scp[2]];
+  else return null;
+  path = path
+    .replace(/^\/+/, "")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
+  if (!path) return null;
+  return `https://${host}/${path}`;
+}
+
 const empty = (): BranchInfo => ({
   repo: false,
   branch: null,
@@ -72,6 +91,7 @@ const empty = (): BranchInfo => ({
   ahead: null,
   behind: null,
   pr: null,
+  remoteUrl: null,
   prLookup: "skipped",
 });
 
@@ -106,12 +126,14 @@ export function createBranchReader() {
     const symbolic = await run("git", ["symbolic-ref", "--short", "-q", "HEAD"], cwd);
     if (symbolic.code === 0 && symbolic.stdout.trim()) info.branch = symbolic.stdout.trim();
     else info.detached = true;
-    const [sha, status, upstream] = await Promise.all([
+    const [sha, status, upstream, remote] = await Promise.all([
       run("git", ["rev-parse", "--short", "HEAD"], cwd),
       run("git", ["status", "--porcelain", "--untracked-files=no"], cwd),
       run("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], cwd),
+      run("git", ["remote", "get-url", "origin"], cwd),
     ]);
     if (sha.code === 0) info.sha = sha.stdout.trim() || null;
+    if (remote.code === 0) info.remoteUrl = parseRemoteUrl(remote.stdout);
     info.dirty = status.code === 0 && status.stdout.trim().length > 0;
     if (upstream.code === 0 && upstream.stdout.trim()) {
       info.upstream = upstream.stdout.trim();

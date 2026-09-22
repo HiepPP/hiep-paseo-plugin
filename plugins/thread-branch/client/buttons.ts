@@ -46,3 +46,21 @@ export function describePrPill(info: BranchInfo, openPr: () => Promise<void>): P
     behavior: { kind: "action", onPress: openPr },
   };
 }
+
+/** One click opens the repository page of `origin`; hidden when there is no web remote. */
+export function describeRepoPill(info: BranchInfo, openRepo: () => Promise<void>): PluginButton {
+  const url = info.remoteUrl;
+  const label = url
+    ? url
+        .replace(/^https?:\/\/[^/]+\//, "")
+        .split("/")
+        .pop() || "Repo"
+    : "Repo";
+  return {
+    title: url ? `Open ${url}` : "Open repository",
+    icon: url?.includes("github.com") ? "Github" : "Globe",
+    label,
+    visible: info.repo && url !== null,
+    behavior: { kind: "action", onPress: openRepo },
+  };
+}

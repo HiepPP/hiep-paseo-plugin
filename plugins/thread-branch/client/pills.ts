@@ -1,7 +1,7 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { copyText } from "@getpaseo/plugin/client/react-native";
 import { getBranchRpc, type BranchInfo } from "../shared/branch";
-import { describeBranchPill, describePrPill } from "./buttons";
+import { describeBranchPill, describePrPill, describeRepoPill } from "./buttons";
 import { openUrl } from "./open";
 
 export const POLL_MS = 15_000;
@@ -32,6 +32,7 @@ function signature(info: BranchInfo) {
     info.ahead,
     info.behind,
     info.pr,
+    info.remoteUrl,
   ]);
 }
 
@@ -42,7 +43,12 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
   const agents = new Map<string, Tracked>();
   const pills = new Map<
     string,
-    { branch: PluginButtonRegistration; pr: PluginButtonRegistration; signature: string }
+    {
+      branch: PluginButtonRegistration;
+      pr: PluginButtonRegistration;
+      repo: PluginButtonRegistration;
+      signature: string;
+    }
   >();
   const infoByCwd = new Map<string, BranchInfo>();
   let stopped = false;
@@ -54,6 +60,11 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
         const pr = infoByCwd.get(cwd)?.pr;
         if (!pr) throw new Error("No pull request for this branch.");
         await open(pr.url);
+      },
+      async openRepo() {
+        const url = infoByCwd.get(cwd)?.remoteUrl;
+        if (!url) throw new Error("No remote repository for this directory.");
+        await open(url);
       },
       async copy() {
         const branch = infoByCwd.get(cwd)?.branch;
@@ -74,12 +85,14 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       const actions = actionsFor(cwd);
       const branch = describeBranchPill(info, actions);
       const pr = describePrPill(info, actions.openPr);
+      const repo = describeRepoPill(info, actions.openRepo);
       const existing = pills.get(agentId);
       if (existing) {
         // Updating behavior closes an open menu; skip no-op updates from the poll loop.
         if (existing.signature === next) continue;
         existing.branch.update(branch);
         existing.pr.update(pr);
+        existing.repo.update(repo);
         existing.signature = next;
         continue;
       }
@@ -87,6 +100,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       pills.set(agentId, {
         branch: client.addComposerPill({ id: "thread-branch", ...target, button: branch }),
         pr: client.addComposerPill({ id: "thread-branch-pr", ...target, button: pr }),
+        repo: client.addComposerPill({ id: "thread-branch-repo", ...target, button: repo }),
         signature: next,
       });
     }
@@ -132,6 +146,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     const existing = pills.get(agentId);
     existing?.branch.remove();
     existing?.pr.remove();
+    existing?.repo.remove();
     pills.delete(agentId);
     if (!keepAgent) agents.delete(agentId);
   }
@@ -169,9 +184,10 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     stopped = true;
     clearTimeout(timer);
     unsubscribe();
-    for (const { branch, pr } of pills.values()) {
+    for (const { branch, pr, repo } of pills.values()) {
       branch.remove();
       pr.remove();
+      repo.remove();
     }
     pills.clear();
     agents.clear();
