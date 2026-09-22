@@ -9,6 +9,7 @@ import { boardColumns, type RunTree } from "../shared/tree";
 import { BoardSizeControl } from "./size-control";
 import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
+import { openNewWorkspaceForProject } from "./web";
 import { AgentAvatar } from "./avatar";
 
 const SECOND = 1_000;
@@ -799,6 +800,7 @@ function RunColumn({
   theme,
   onRemove,
   onOpen,
+  onOpenProject,
   onStar,
   scale,
 }: {
@@ -814,6 +816,7 @@ function RunColumn({
   theme: PluginSurfaceProps["theme"];
   onRemove?: (id: string) => Promise<void>;
   onOpen?: (agentId: string) => void;
+  onOpenProject?: (run: BoardRun) => void;
   onStar: (id: string, starred: boolean) => Promise<void>;
 }) {
   const s = (value: number) => value * scale;
@@ -945,14 +948,34 @@ function RunColumn({
                   paddingTop: s(2),
                 }}
               >
-                <ProjectMark name={project.name} color={mark(project)} size={s(20)} theme={theme} />
-                <View style={{ flex: 1 }}>
-                  {heading(
-                    project.name,
-                    groupCount(project) > 1 ? String(groupCount(project)) : null,
-                    colors.foreground,
-                  )}
-                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`New conversation in ${project.name}`}
+                  disabled={!onOpenProject}
+                  onPress={() => onOpenProject?.(project.runs[0])}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: s(8),
+                    borderRadius: s(CONTROL_RADIUS),
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                >
+                  <ProjectMark
+                    name={project.name}
+                    color={mark(project)}
+                    size={s(20)}
+                    theme={theme}
+                  />
+                  <View style={{ flex: 1 }}>
+                    {heading(
+                      project.name,
+                      groupCount(project) > 1 ? String(groupCount(project)) : null,
+                      colors.foreground,
+                    )}
+                  </View>
+                </Pressable>
               </View>
               {project.runs.map(renderCard)}
             </View>
@@ -1041,6 +1064,20 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
       else next.add(id);
       return next;
     });
+  // Same flow as the sidebar project "+" button: the New workspace screen with this project selected.
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const onOpenProject = (run: BoardRun) => {
+    setProjectError(null);
+    const opened =
+      run.cwd !== undefined &&
+      openNewWorkspaceForProject({
+        serverId: host.id,
+        cwd: run.cwd,
+        name: run.project,
+        projectId: run.projectId,
+      });
+    if (!opened) setProjectError("Starting a conversation from the Board needs the desktop app.");
+  };
   const onRemove = async (id: string) => {
     const run = runs.find((item) => item.id === id);
     if (!run) return;
@@ -1251,6 +1288,14 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
           </View>
         ) : (
           <>
+            {projectError ? (
+              <Text
+                accessibilityRole="alert"
+                style={{ color: colors.statusDanger, fontSize: s(13), lineHeight: s(18) }}
+              >
+                {projectError}
+              </Text>
+            ) : null}
             {snapshotWarning ? (
               <View
                 accessibilityRole="alert"
@@ -1318,6 +1363,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 emptyMessage="No conversations are running."
                 theme={theme}
                 onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+                onOpenProject={onOpenProject}
               />
               {layout.compact ? null : (
                 <View
@@ -1339,6 +1385,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 emptyMessage="No finished conversations observed yet."
                 theme={theme}
                 onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+                onOpenProject={onOpenProject}
                 onRemove={onRemove}
               />
             </View>

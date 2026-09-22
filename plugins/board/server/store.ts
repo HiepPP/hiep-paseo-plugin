@@ -210,7 +210,6 @@ export function createRunStore(now = () => new Date().toISOString()) {
             providerTurnId: _p,
             snapshotTurnId: _s,
             dismissed: _d,
-            cwd: _c,
             projectResolved: _r,
             ...run
           }) => run,

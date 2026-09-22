@@ -25,9 +25,37 @@ interface Event {
 }
 declare const document: {
   head: Element;
+  querySelector(selector: string): Element | null;
   querySelectorAll(selector: string): Iterable<Element>;
   createElement(tag: string): Element;
 };
+declare const history: { pushState(state: unknown, title: string, url: string): void };
+declare const PopStateEvent: new (type: string) => unknown;
+declare function dispatchEvent(event: unknown): void;
+
+/**
+ * Mirrors the sidebar project "+" button: click it when rendered, otherwise push the same
+ * `/new?...` route the app builds for it. Returns false when neither is possible.
+ */
+export function openNewWorkspaceForProject(input: {
+  serverId: string;
+  cwd: string;
+  name: string;
+  projectId?: string;
+}): boolean {
+  if (Platform.OS !== "web" || typeof document === "undefined") return false;
+  const label = `Create a new workspace for ${input.name}`.replace(/"/g, '\\"');
+  const button = document.querySelector(`[aria-label="${label}"]`);
+  if (button && button.getAttribute("aria-disabled") !== "true") {
+    button.click();
+    return true;
+  }
+  const query = new URLSearchParams({ serverId: input.serverId, dir: input.cwd, name: input.name });
+  if (input.projectId) query.set("projectId", input.projectId);
+  history.pushState(null, "", `/new?${query.toString()}`);
+  dispatchEvent(new PopStateEvent("popstate"));
+  return true;
+}
 
 // Keep Paseo's agent-scoped action and pending/error handling; only its desktop placement changes.
 export function installRemovePlacement() {
