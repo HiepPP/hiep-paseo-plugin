@@ -91,9 +91,10 @@ export function describeRefsPill(
     visible: info.repo && remote !== null && refs.length > 0,
     behavior: {
       kind: "menu",
-      items: refs.map((ref) => ({
+      // Host ids allow only `[a-z][a-z0-9-]*`, so ref values like `feat/x` cannot be ids.
+      items: refs.map((ref, index) => ({
         kind: "item" as const,
-        id: `${ref.kind}:${ref.value}`,
+        id: `ref-${index}`,
         title: refTitle(ref),
         icon: refIcons[ref.kind],
         behavior: {

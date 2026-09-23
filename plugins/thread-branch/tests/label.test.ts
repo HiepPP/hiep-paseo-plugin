@@ -4,6 +4,7 @@ import { pillLabel, pillTitle } from "../client/label";
 import {
   describeBranchPill,
   describePrPill,
+  describeRefsPill,
   describeRepoPill,
   describeSyncPill,
   syncState,
@@ -133,4 +134,22 @@ test("sync state puts pulling first", () => {
   assert.equal(syncState(3, 0), "ahead");
   assert.equal(syncState(0, 1), "behind");
   assert.equal(syncState(3, 1), "behind");
+});
+
+test("refs menu item ids satisfy the host button id rule", () => {
+  const refs = [
+    { kind: "pr" as const, value: "42" },
+    { kind: "commit" as const, value: "fad9d70" },
+    { kind: "branch" as const, value: "feat/x" },
+  ];
+  const pill = describeRefsPill(
+    { ...base, remoteUrl: "https://github.com/o/r" },
+    refs,
+    async () => {},
+  );
+  assert.equal(pill.behavior.kind, "menu");
+  if (pill.behavior.kind !== "menu") return;
+  const ids = pill.behavior.items.map((item) => item.id);
+  for (const id of ids) assert.match(id, /^[a-z][a-z0-9-]*$/);
+  assert.equal(new Set(ids).size, refs.length);
 });

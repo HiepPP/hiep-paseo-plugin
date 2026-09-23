@@ -1,4 +1,8 @@
-import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
+import type {
+  PluginButton,
+  PluginButtonRegistration,
+  PluginClientContext,
+} from "@getpaseo/plugin/client";
 import { copyText } from "@getpaseo/plugin/client/react-native";
 import { getBranchRpc, type BranchInfo } from "../shared/branch";
 import {
@@ -122,23 +126,44 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       if (existing) {
         // Updating behavior closes an open menu; skip no-op updates from the poll loop.
         if (existing.signature === next) continue;
-        existing.branch.update(branch);
-        existing.sync.update(sync);
-        existing.pr.update(pr);
-        existing.repo.update(repo);
-        existing.refs.update(refs);
-        existing.signature = next;
+        try {
+          existing.branch.update(branch);
+          existing.sync.update(sync);
+          existing.pr.update(pr);
+          existing.repo.update(repo);
+          existing.refs.update(refs);
+          existing.signature = next;
+        } catch (error) {
+          console.warn("[thread-branch] Failed to update pills", agentId, error);
+        }
         continue;
       }
-      const target = { workspaceId: tracked.workspaceId, agentId };
-      pills.set(agentId, {
-        branch: client.addComposerPill({ id: "thread-branch", ...target, button: branch }),
-        sync: client.addComposerPill({ id: "thread-branch-sync", ...target, button: sync }),
-        pr: client.addComposerPill({ id: "thread-branch-pr", ...target, button: pr }),
-        repo: client.addComposerPill({ id: "thread-branch-repo", ...target, button: repo }),
-        refs: client.addComposerPill({ id: "thread-branch-refs", ...target, button: refs }),
-        signature: next,
-      });
+      const created: PluginButtonRegistration[] = [];
+      const add = (id: string, button: PluginButton) => {
+        const registration = client.addComposerPill({
+          id,
+          workspaceId: tracked.workspaceId,
+          agentId,
+          button,
+        });
+        created.push(registration);
+        return registration;
+      };
+      try {
+        pills.set(agentId, {
+          branch: add("thread-branch", branch),
+          sync: add("thread-branch-sync", sync),
+          pr: add("thread-branch-pr", pr),
+          repo: add("thread-branch-repo", repo),
+          refs: add("thread-branch-refs", refs),
+          signature: next,
+        });
+      } catch (error) {
+        // A rejected pill must not leave half a set behind (retries would hit duplicate ids)
+        // or stop the loop, which would hide pills of every later thread in this directory.
+        for (const registration of created) registration.remove();
+        console.warn("[thread-branch] Failed to add pills", agentId, error);
+      }
     }
   }
 
@@ -159,6 +184,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
   }
 
   async function refreshAll() {
+    if (!observation) await bootstrap().catch(() => {});
     const cwds = new Set<string>();
     for (const tracked of agents.values()) cwds.add(tracked.cwd);
     await Promise.all(
@@ -188,7 +214,8 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     if (previous && previous.cwd !== agent.cwd) untrack(agent.id, true);
     const known = infoByCwd.get(agent.cwd);
     if (known) apply(agent.cwd, known);
-    else if (!previous) void refreshCwd(agent.cwd, false).catch(() => {});
+    else if (!previous || previous.cwd !== agent.cwd)
+      void refreshCwd(agent.cwd, false).catch(() => {});
   }
 
   function untrack(agentId: string, keepAgent = false) {
@@ -211,26 +238,44 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     else if (update.kind === "remove") untrack(update.agentId);
   });
 
-  async function bootstrap() {
+  const filter = { includeArchived: false };
+  let observation: { release(): Promise<void> } | undefined;
+
+  async function listRest(cursor: string | null | undefined) {
     const seen = new Set<string>();
-    let cursor: string | undefined;
-    do {
-      const page = await client.paseo.agents.list({
-        filter: { includeArchived: false },
-        page: { limit: 200, ...(cursor ? { cursor } : {}) },
-      });
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      const page = await client.paseo.agents.list({ filter, page: { limit: 200, cursor } });
       if (stopped) return;
       for (const { agent } of page.entries) track(agent);
-      if (!page.pageInfo.hasMore) break;
-      cursor = page.pageInfo.nextCursor ?? undefined;
-      if (!cursor || seen.has(cursor)) break;
-      seen.add(cursor);
-    } while (cursor);
+      if (!page.pageInfo.hasMore) return;
+      cursor = page.pageInfo.nextCursor;
+    }
+  }
+
+  async function bootstrap() {
+    // Plain list() creates no daemon demand, so agents.subscribe() would never fire; observing the
+    // directory keeps new agents flowing and replays a snapshot after a reconnect.
+    const first = await client.paseo.agents.list({ filter, page: { limit: 200 }, subscribe: {} });
+    if (stopped) return void first.subscription.release().catch(() => {});
+    observation = first.subscription;
+    first.subscription.subscribe({
+      snapshot({ entries, pageInfo }) {
+        if (stopped) return;
+        for (const { agent } of entries) track(agent);
+        if (pageInfo.hasMore) return void listRest(pageInfo.nextCursor).catch(() => {});
+        const live = new Set(entries.map(({ agent }) => agent.id));
+        for (const agentId of agents.keys()) if (!live.has(agentId)) untrack(agentId);
+      },
+      update() {
+        // Directory updates reach the agents.subscribe() handler.
+      },
+    });
   }
 
   void bootstrap()
     .catch(() => {
-      // Live upserts still attach pills when the initial listing fails.
+      // Each poll tick retries until the directory observation starts.
     })
     .finally(schedule);
 
@@ -238,6 +283,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     stopped = true;
     clearTimeout(timer);
     unsubscribe();
+    void observation?.release().catch(() => {});
     for (const { branch, sync, pr, repo, refs } of pills.values()) {
       branch.remove();
       sync.remove();
