@@ -80,6 +80,49 @@ test("DOM button preserves code/copy/draft; sends once and cleans up on disable"
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+test("Edit puts the prompt in the composer, replacing the draft, without sending", async () => {
+  // Another conversation stays mounted with its own composer; the host marks the real field
+  // with dataSet={{composerInput:""}}.
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div id="other"><textarea data-composer-input="">other conversation</textarea></div><div id="mine"><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Test UI.</span></div></div><div data-testid="message-input-root"><textarea data-composer-input="">half-written draft</textarea></div></div></body></html>',
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  let sends = 0;
+  let inputEvents = 0;
+  const other = document.querySelector("#other textarea")!;
+  const field = document.querySelector("#mine textarea")!;
+  field.addEventListener("input", () => inputEvents++);
+  const cleanup = install(
+    {
+      inspect: async () => snapshot,
+      send: async () => {
+        sends++;
+        return snapshot;
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => context,
+  );
+  try {
+    await pause();
+    const edit = document.querySelector(".npa-edit")!;
+    assert.equal(edit.textContent, "Edit ↓");
+    edit.dispatchEvent(new window.Event("click"));
+    assert.equal(field.value, "Test UI.");
+    assert.equal(other.value, "other conversation", "another conversation must stay untouched");
+    assert.equal(inputEvents, 1, "React needs the input event to adopt the value");
+    assert.equal(sends, 0);
+    assert.equal(document.querySelector(".npa-note")!.textContent, "Ready in the composer.");
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
 test("React identity fails closed on streaming or missing scope", () => {
   const props = { message: context.message, timestamp: 100, phase: "complete" };
   const node = {

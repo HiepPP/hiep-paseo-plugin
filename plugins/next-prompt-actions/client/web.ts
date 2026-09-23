@@ -10,17 +10,23 @@ export interface Node {
   querySelector(selector: string): Node | null;
   querySelectorAll(selector: string): ArrayLike<Node>;
   closest(selector: string): Node | null;
+  contains?(node: Node): boolean;
   getAttribute(name: string): string | null;
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
   appendChild(node: Node): void;
   remove(): void;
   addEventListener(name: string, handler: () => void): void;
+  value?: string;
+  focus?(): void;
+  setSelectionRange?(start: number, end: number): void;
+  dispatchEvent(event: object): void;
 }
 interface Document extends Node {
   head: Node;
   body: Node;
   createElement(tag: string): Node;
+  defaultView?: { Event: new (type: string, init?: { bubbles?: boolean }) => object } | null;
 }
 interface Fiber {
   memoizedProps?: Record<string, unknown>;
@@ -93,12 +99,42 @@ const styles = `
 [${OWNER}] .npa-row {display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
 [${OWNER}] button {font:inherit;cursor:pointer;border:1px solid transparent;border-radius:7px;padding:7px 13px;min-height:34px;}
 [${OWNER}] .npa-send {background:var(--npa-ink,#303034);color:var(--npa-paper,#fff);}
+[${OWNER}] .npa-edit {background:transparent;color:var(--npa-ink,#303034);border-color:currentColor;}
 [${OWNER}] button:focus-visible {outline:2px solid currentColor;outline-offset:3px;}
 [${OWNER}] button:disabled {opacity:.45;cursor:default;}
 [${OWNER}] .npa-note {font-size:12px;opacity:.75;white-space:normal;overflow-wrap:anywhere;}
 [${OWNER}] .npa-note:empty {display:none;}
 [${OWNER}] .npa-label {flex:1;white-space:pre-wrap;overflow-wrap:anywhere;min-width:160px;}
 `;
+
+// The host marks the composer field with dataSet={{composerInput:""}}; the root testID is the
+// fallback for hosts that predate it.
+const FIELDS = ["[data-composer-input]", '[data-testid="message-input-root"] textarea'];
+// Several conversations can stay mounted at once, so prefer the composer sharing the closest
+// ancestor with the clicked prompt rather than whichever comes first in the document.
+export function composerField(doc: Document, block?: Node): Node | null {
+  const fields = FIELDS.flatMap((selector) => Array.from(doc.querySelectorAll(selector)));
+  if (fields.length < 2) return fields[0] ?? null;
+  for (let node = block ?? null; node; node = node.parentElement)
+    for (const field of fields) if (node.contains?.(field)) return field;
+  return fields[fields.length - 1];
+}
+export function fillComposer(text: string, doc: Document, block?: Node): string {
+  const field = composerField(doc, block);
+  const view = doc.defaultView;
+  if (!field || !view) return "Composer not found. Open the conversation, then try again.";
+  // The field is uncontrolled, but React still tracks the last value it saw: write through the
+  // prototype setter and replay the input event so the host adopts the new text.
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")?.set;
+  if (setter) setter.call(field, text);
+  else field.value = text;
+  field.dispatchEvent(new view.Event("input", { bubbles: true }));
+  field.focus?.();
+  field.setSelectionRange?.(text.length, text.length);
+  return field.value === text
+    ? "Ready in the composer."
+    : "The composer did not accept the text; copy it from the block above.";
+}
 
 export function install(controller: Controller, doc: Document = document, identify = binding) {
   let stopped = false,
@@ -179,6 +215,17 @@ export function install(controller: Controller, doc: Document = document, identi
         label.textContent = candidate.text;
         row.appendChild(label);
       }
+      const edit = doc.createElement("button");
+      edit.setAttribute("type", "button");
+      edit.setAttribute("class", "npa-edit");
+      edit.setAttribute("aria-label", `Edit suggested prompt in the composer: ${candidate.text}`);
+      edit.textContent = "Edit ↓";
+      edit.addEventListener("click", () => {
+        if (edit.disabled || !valid(block, context, candidate)) return;
+        note.textContent = fillComposer(candidate.text, doc, block);
+      });
+      controls.push(edit);
+      row.appendChild(edit);
       const send = doc.createElement("button");
       send.setAttribute("type", "button");
       send.setAttribute("class", "npa-send");
