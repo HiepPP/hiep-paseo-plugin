@@ -46,7 +46,7 @@ test("reads this repository and reports a non-git directory without throwing", a
   assert.equal(outside.pr, null);
 });
 
-test("fetch updates the behind count and reports fetch failures", async () => {
+test("fetch updates the behind count without committing, merging, or pushing", async () => {
   const { execFileSync } = await import("node:child_process");
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -66,9 +66,17 @@ test("fetch updates the behind count and reports fetch failures", async () => {
     const reader = createBranchReader();
     const a = join(root, "a");
     assert.equal((await reader.get(a)).behind, 0);
+    const head = () => git(a, "rev-parse", "HEAD").toString().trim();
+    const remoteMain = () => git(root, "--git-dir=remote.git", "rev-parse", "main").toString();
+    const headBefore = head();
+    const remoteBefore = remoteMain();
     const fetched = await reader.get(a, true, true);
     assert.equal(fetched.behind, 1);
     assert.equal(fetched.ahead, 0);
+    // Fetch only moves remote-tracking refs: no merge into HEAD, nothing pushed, no new commit.
+    assert.equal(head(), headBefore);
+    assert.equal(remoteMain(), remoteBefore);
+    assert.equal(git(a, "status", "--porcelain").toString(), "");
 
     git(a, "remote", "set-url", "origin", join(root, "missing.git"));
     await assert.rejects(reader.get(a, true, true), /git fetch failed/);
