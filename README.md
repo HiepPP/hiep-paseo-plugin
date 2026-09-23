@@ -53,15 +53,13 @@ This capture shows the missing-file state when the repository has no active
 
 ## Read the next step, then send it
 
-Next prompt actions puts **Send** at the bottom right of a suggested prompt.
-Read the full suggestion, then continue in the same conversation without copying
-and pasting. Your composer draft stays intact.
+Next prompt actions turns each suggested prompt into a card with **Edit** and
+**Send**, plus an optional reason. Several prompts add **Edit all** and
+**Send all**. Continue in the same conversation without copying and pasting.
 
-![A multiline suggested prompt in Paseo with Send below the final line, aligned to the bottom right.](docs/images/next-prompt-actions.png)
+![Two prompt cards, each with a why reason and Edit and Send, above Edit all and Send all.](docs/images/next-prompt-actions.png)
 
-Earlier sample capture, September 21, desktop 0.8.0. The historical conversation
-inspected during this refresh did not display Send; this image does not verify
-that action on the current client.
+Sample capture, September 23, desktop 0.9.1.
 
 Optional Jev auto-run lives in Command Center and starts off. Desktop only;
 uses a private adapter for the existing Markdown blocks.

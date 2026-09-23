@@ -5,9 +5,9 @@ Each prompt renders as its own card with Edit and Send; the raw fence is hidden,
 An optional `why:` line under a prompt shows as its reason and is never sent.
 Several prompts also get Edit all and Send all for one numbered message. The composer draft is preserved.
 
-![A multiline prompt with Send at the bottom right, after all prompt text.](../../docs/images/next-prompt-actions.png)
+![Two prompt cards, each with a why reason and Edit and Send, above Edit all and Send all.](../../docs/images/next-prompt-actions.png)
 
-Captured from Paseo desktop 0.8.0 using synthetic sample text.
+Captured from Paseo desktop 0.9.1 using sample suggestions.
 
 ## Compatibility
 
