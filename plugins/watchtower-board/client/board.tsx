@@ -1,4 +1,9 @@
-import { type PluginWorkspacePanelProps, useRpc, useWorkspace } from "@getpaseo/plugin/client";
+import {
+  type PluginHostProps,
+  type PluginWorkspacePanelProps,
+  useRpc,
+  useWorkspace,
+} from "@getpaseo/plugin/client";
 import { copyText, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -14,8 +19,19 @@ const groupLabels: Record<TaskGroup, string> = {
   unknown: "Unknown",
 };
 
-export function WatchtowerPanel({ workspaceId, host, theme, layout }: PluginWorkspacePanelProps) {
-  const projectName = useWorkspace(workspaceId, (workspace) => workspace.projectDisplayName);
+export function WatchtowerPanel(props: PluginWorkspacePanelProps) {
+  const projectName = useWorkspace(props.workspaceId, (workspace) => workspace.projectDisplayName);
+  return <WatchtowerBoard {...props} projectName={projectName} />;
+}
+
+// useWorkspace throws outside workspace panels, so the sidebar page passes projectName itself.
+export function WatchtowerBoard({
+  workspaceId,
+  projectName,
+  host,
+  theme,
+  layout,
+}: PluginHostProps & { workspaceId: string; projectName: string | null }) {
   const read = useRpc(readBoardRpc);
   const board = useQuery({
     queryKey: ["watchtower-board", host.id, workspaceId],
