@@ -36,7 +36,8 @@ interface Fiber {
 }
 declare const document: Document;
 declare const navigator: { userAgent: string };
-declare const MutationObserver: new (callback: () => void) => {
+type Mutation = { target: Node; addedNodes: ArrayLike<Node>; removedNodes: ArrayLike<Node> };
+declare const MutationObserver: new (callback: (records: Mutation[]) => void) => {
   observe(node: Node, options: unknown): void;
   disconnect(): void;
 };
@@ -142,7 +143,13 @@ export function install(controller: Controller, doc: Document = document, identi
     running = false,
     rescan = false;
   let scanTimer: ReturnType<typeof setTimeout> | undefined;
-  const owned = new Map<Node, { signature: string; cleanup(): void }>();
+  type Owned = {
+    structure: string;
+    state: string;
+    update(candidates: Candidate[], snapshot: Snapshot): void;
+    cleanup(): void;
+  };
+  const owned = new Map<Node, Owned>();
   const style = doc.createElement("style");
   style.textContent = styles;
   doc.head.appendChild(style);
@@ -164,14 +171,22 @@ export function install(controller: Controller, doc: Document = document, identi
     );
   }
   function render(block: Node, context: Binding, candidates: Candidate[], snapshot: Snapshot) {
-    const signature = JSON.stringify([
-      context,
-      candidates,
+    // Rebuilding the controls flashes and shifts layout, so state changes patch them in place.
+    const structure = JSON.stringify([context, candidates.map(({ state: _, ...rest }) => rest)]);
+    const state = JSON.stringify([
+      candidates.map((c) => c.state),
       snapshot.enabled,
       snapshot.busy,
       snapshot.note,
     ]);
-    if (owned.get(block)?.signature === signature) return;
+    const current = owned.get(block);
+    if (current?.structure === structure) {
+      if (current.state !== state) {
+        current.state = state;
+        current.update(candidates, snapshot);
+      }
+      return;
+    }
     clear(block);
     if (block.querySelector(`[${OWNER}]`)) return;
     const ui = doc.createElement("div");
@@ -188,11 +203,28 @@ export function install(controller: Controller, doc: Document = document, identi
     const note = doc.createElement("div");
     note.setAttribute("class", "npa-note");
     note.setAttribute("role", "status");
-    note.textContent = snapshot.note;
     ui.appendChild(note);
-    const controls: Node[] = [];
+    const edits: Node[] = [];
+    const sends: Node[] = [];
+    const controls = [edits, sends];
+    function update(next: Candidate[], latest: Snapshot) {
+      note.textContent = latest.note;
+      next.forEach((candidate, index) => {
+        edits[index].disabled = false;
+        sends[index].textContent =
+          candidate.state === "sent"
+            ? "Sent"
+            : candidate.state === "unknown"
+              ? "Check chat"
+              : candidate.state === "sending"
+                ? "Sending..."
+                : "Send ↑";
+        sends[index].disabled =
+          latest.busy || candidate.state !== "ready" || latest.note === "Jev reviewing...";
+      });
+    }
     async function action(run: () => Promise<unknown>, label: string) {
-      controls.forEach((button) => {
+      controls.flat().forEach((button) => {
         button.disabled = true;
       });
       note.textContent = label;
@@ -202,7 +234,7 @@ export function install(controller: Controller, doc: Document = document, identi
         note.textContent = "Action failed. Refresh state and try again.";
       } finally {
         const item = owned.get(block);
-        if (item) item.signature = "";
+        if (item) item.state = "";
         schedule();
       }
     }
@@ -224,35 +256,29 @@ export function install(controller: Controller, doc: Document = document, identi
         if (edit.disabled || !valid(block, context, candidate)) return;
         note.textContent = fillComposer(candidate.text, doc, block);
       });
-      controls.push(edit);
+      edits.push(edit);
       row.appendChild(edit);
       const send = doc.createElement("button");
       send.setAttribute("type", "button");
       send.setAttribute("class", "npa-send");
       send.setAttribute("aria-label", `Send suggested prompt: ${candidate.text}`);
-      send.textContent =
-        candidate.state === "sent"
-          ? "Sent"
-          : candidate.state === "unknown"
-            ? "Check chat"
-            : candidate.state === "sending"
-              ? "Sending..."
-              : "Send ↑";
-      send.disabled =
-        snapshot.busy || candidate.state !== "ready" || snapshot.note === "Jev reviewing...";
       send.addEventListener("click", () => {
         if (send.disabled || !valid(block, context, candidate)) return;
+        send.textContent = "Sending...";
         void action(() => controller.send(context, candidate.key), "Sending...");
       });
-      controls.push(send);
+      sends.push(send);
       row.appendChild(send);
       ui.appendChild(row);
     }
+    update(candidates, snapshot);
     block.appendChild(ui);
     const prior = block.getAttribute("data-npa-block");
     block.setAttribute("data-npa-block", candidates.length === 1 ? "single" : "multiple");
     owned.set(block, {
-      signature,
+      structure,
+      state,
+      update,
       cleanup() {
         ui.remove();
         if (prior === null) block.removeAttribute("data-npa-block");
@@ -328,7 +354,19 @@ export function install(controller: Controller, doc: Document = document, identi
       void scan();
     }, 100);
   }
-  const observer = new MutationObserver(schedule);
+  // Our own note and button updates must not trigger another timeline read.
+  function ours(node: Node) {
+    const element = typeof node.closest === "function" ? node : node.parentElement;
+    return !!element?.closest(`[${OWNER}]`);
+  }
+  const observer = new MutationObserver((records) => {
+    const foreign = records.some((record) => {
+      if (ours(record.target)) return false;
+      const nodes = [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)];
+      return !nodes.length || !nodes.every(ours);
+    });
+    if (foreign) schedule();
+  });
   observer.observe(doc.body, { childList: true, subtree: true, characterData: true });
   const timer = setInterval(schedule, 2500);
   schedule();

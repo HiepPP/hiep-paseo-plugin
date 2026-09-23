@@ -236,3 +236,54 @@ test("new completed prompt renders promptly after a previous scan", async () => 
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+
+test("Send and Edit update controls in place without extra timeline reads", async () => {
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Test UI.</span></div></div></body></html>',
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  // No composer: linkedom, unlike browsers, mutates the DOM on a textarea value write, and the
+  // Edit note alone must be the only change here.
+  let reads = 0;
+  let current = snapshot;
+  const cleanup = install(
+    {
+      inspect: async () => {
+        reads++;
+        return current;
+      },
+      send: async () => {
+        current = { ...snapshot, candidates: [{ ...snapshot.candidates[0], state: "sent" }] };
+        return current;
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => context,
+  );
+  try {
+    // linkedom also reports the block's attribute change, which browsers skip when attributes
+    // are not observed; let that one extra scan settle first.
+    await pause();
+    await pause();
+    const ui = document.querySelector("[data-next-prompt-actions]");
+    const before = reads;
+    document.querySelector(".npa-edit")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.equal(reads, before, "the plugin's own note must not trigger a timeline read");
+    const send = document.querySelector(".npa-send")!;
+    send.dispatchEvent(new window.Event("click"));
+    assert.equal(send.textContent, "Sending...", "Send gives feedback immediately");
+    await pause();
+    assert.equal(document.querySelector("[data-next-prompt-actions]"), ui, "no rebuild flash");
+    assert.equal(send.textContent, "Sent");
+    assert.equal(send.disabled, true);
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
