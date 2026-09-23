@@ -21,6 +21,7 @@ import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
 import { openNewWorkspaceForProject } from "./web";
 import { AgentAvatar } from "./avatar";
+import { Orb, OrbAvatar, orbSupported } from "./orb";
 
 const SECOND = 1_000;
 // Shape lock: cards 12, controls and chips 8.
@@ -239,6 +240,8 @@ function RunCard({
   const s = (value: number) => value * scale;
   const colors = theme.colors;
   const running = run.status === "running";
+  // Web shows running work as a thinking orb; native keeps the avatar and host spinner.
+  const thinking = orbSupported && running && !run.needsInput;
   const duration = runDuration(run, now);
   const tone = run.needsInput
     ? colors.statusWarning
@@ -463,6 +466,8 @@ function RunCard({
                   <AttentionPulse grow={1.2}>
                     <Icon name="CircleAlert" size={s(12)} color={tone} />
                   </AttentionPulse>
+                ) : thinking ? (
+                  <Orb size={s(12)} theme={theme} color={colors.foregroundMuted} />
                 ) : running ? (
                   <Spinner color={colors.foregroundMuted} size={s(12)} />
                 ) : (
@@ -515,7 +520,11 @@ function RunCard({
               style={{ flexDirection: "row", alignItems: "flex-start", gap: s(10) }}
             >
               <View pointerEvents="none">
-                <AgentAvatar agentId={run.agentId} size={s(40)} />
+                {thinking ? (
+                  <OrbAvatar agentId={run.agentId} size={s(40)} theme={theme} />
+                ) : (
+                  <AgentAvatar agentId={run.agentId} size={s(40)} />
+                )}
               </View>
               <View pointerEvents="none" style={{ flex: 1, gap: s(6) }}>
                 <Text
@@ -590,7 +599,7 @@ function RunCard({
                       Needs input
                     </Text>
                   </AttentionPulse>
-                ) : running ? (
+                ) : thinking ? null : running ? (
                   <Spinner color={tone} size={s(14)} />
                 ) : (
                   <View
