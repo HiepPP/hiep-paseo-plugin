@@ -1,4 +1,5 @@
-export type PromptBlock = { block: string; prompts: string[] };
+// `whys[i]` is the optional reason shown under `prompts[i]`; it is never sent.
+export type PromptBlock = { block: string; prompts: string[]; whys: string[] };
 
 // Accept only top-level fenced suggestions in an explicit next-step section.
 export function parsePrompts(markdown: string): PromptBlock[] {
@@ -12,18 +13,22 @@ export function parsePrompts(markdown: string): PromptBlock[] {
         if (fence.eligible) {
           const block = fence.lines.join("\n").replace(/\n+$/, "");
           const prompts: string[] = [];
+          const whys: string[] = [];
           let current: string[] | null = null;
           let valid = true;
           for (const bodyLine of block.split("\n")) {
             if (/^prompt:/i.test(bodyLine)) {
               if (current) prompts.push(current.join("\n").replace(/\n+$/, ""));
               current = [bodyLine.replace(/^prompt:[ \t]?/i, "")];
-            } else if (current) current.push(bodyLine);
+              whys.push("");
+            } else if (current && /^why:/i.test(bodyLine) && !whys[whys.length - 1])
+              whys[whys.length - 1] = bodyLine.replace(/^why:/i, "").trim();
+            else if (current) current.push(bodyLine);
             else if (bodyLine.trim()) valid = false;
           }
           if (current) prompts.push(current.join("\n").replace(/\n+$/, ""));
           if (valid && prompts.length && prompts.every((p) => p.trim() && p.length <= 16000))
-            result.push({ block, prompts });
+            result.push({ block, prompts, whys });
         }
         fence = null;
         continue;
@@ -43,4 +48,10 @@ export function parsePrompts(markdown: string): PromptBlock[] {
       };
   }
   return result;
+}
+
+// Several prompts sent or edited together become one numbered message.
+export function joinPrompts(prompts: string[]): string {
+  if (prompts.length === 1) return prompts[0];
+  return prompts.map((p, i) => `${i + 1}. ${p.replace(/\n/g, "\n   ")}`).join("\n");
 }

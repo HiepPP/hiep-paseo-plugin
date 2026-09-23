@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
-import { parsePrompts } from "../shared/prompts";
+import { joinPrompts, parsePrompts } from "../shared/prompts";
 import { Store } from "./store";
 
 export type Row = {
@@ -49,13 +49,14 @@ export class Engine {
     // Only the last assistant response can offer a continuation, never tool output.
     const row = current.rows.findLast((r, i) => i > user && r.type === "assistant_message");
     if (!row?.text) return [];
-    return parsePrompts(row.text).flatMap(({ block, prompts }, b) =>
+    return parsePrompts(row.text).flatMap(({ block, prompts, whys }, b) =>
       prompts.map((text, p) => {
         const key = hash(JSON.stringify([scope.agentId, current.epoch, row.id, b, p, text]));
         return {
           key,
           block,
           text,
+          why: whys[p] || undefined,
           source: row.text!,
           timestamp: row.timestamp,
           state: this.store.get(scope.agentId).handled[key] ?? "ready",
@@ -110,7 +111,13 @@ export class Engine {
     this.store.save();
   }
 
-  async send(scope: Scope, key: string, automatic = false, generation?: number): Promise<void> {
+  async send(
+    scope: Scope,
+    key: string | string[],
+    automatic = false,
+    generation?: number,
+  ): Promise<void> {
+    const keys = typeof key === "string" ? [key] : key;
     if (this.stopped || this.locks.has(scope.agentId)) throw new Error("Send already in progress.");
     this.locks.add(scope.agentId);
     try {
@@ -119,9 +126,16 @@ export class Engine {
       if (sourceGeneration !== this.generations.get(scope.agentId))
         throw new Error("Conversation changed.");
       const entry = this.store.get(scope.agentId);
-      const candidate = this.candidates(scope, current).find((c) => c.key === key);
-      if (current.busy || !candidate || candidate.state !== "ready")
+      const all = this.candidates(scope, current);
+      const picked = keys.flatMap((k) => all.filter((c) => c.key === k && c.state === "ready"));
+      if (
+        current.busy ||
+        !keys.length ||
+        new Set(keys).size !== keys.length ||
+        picked.length !== keys.length
+      )
         throw new Error("Prompt is stale, busy, or already submitted.");
+      const text = joinPrompts(picked.map((c) => c.text));
       if (
         automatic &&
         (!entry.enabled ||
@@ -130,11 +144,11 @@ export class Engine {
       )
         throw new Error("Automatic send cancelled.");
       // Persist reservation before dispatch. An uncertain acknowledgement is never retried.
-      entry.handled[key] = "sending";
-      const messageId = `next-prompt-${key}`;
+      for (const k of keys) entry.handled[k] = "sending";
+      const messageId = `next-prompt-${keys.length === 1 ? keys[0] : hash(keys.join("\n"))}`;
       if (automatic) {
         entry.remaining--;
-        entry.autoMessageIds.push(messageId, `text:${hash(candidate.text)}`);
+        entry.autoMessageIds.push(messageId, `text:${hash(text)}`);
       } else this.invalidate(scope.agentId);
       this.store.save();
       // The turn can start before the acknowledgement returns; this note belongs to the turn
@@ -144,17 +158,17 @@ export class Engine {
         const dispatchGeneration = this.generations.get(scope.agentId);
         await this.driver.send(
           scope,
-          candidate.text,
+          text,
           messageId,
           () =>
             !this.stopped &&
             dispatchGeneration === this.generations.get(scope.agentId) &&
             (!automatic || entry.enabled),
         );
-        entry.handled[key] = "sent";
+        for (const k of keys) entry.handled[k] = "sent";
         this.note(scope.agentId, automatic ? "Jev approved; prompt sent." : "Prompt sent.", stamp);
       } catch {
-        entry.handled[key] = "unknown";
+        for (const k of keys) entry.handled[k] = "unknown";
         entry.remaining = 0;
         this.note(
           scope.agentId,

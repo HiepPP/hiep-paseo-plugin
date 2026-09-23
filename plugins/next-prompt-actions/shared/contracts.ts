@@ -11,6 +11,7 @@ export const candidateSchema = z.object({
   key: z.string(),
   block: z.string(),
   text: z.string(),
+  why: z.string().optional(),
   source: z.string(),
   timestamp: z.number(),
   state: z.enum(["ready", "sending", "sent", "unknown"]),
@@ -35,7 +36,7 @@ export const inspectRpc = defineRpc({
 });
 export const sendRpc = defineRpc({
   name: "prompts.send",
-  input: scopeSchema.extend({ key: z.string() }),
+  input: scopeSchema.extend({ key: z.union([z.string(), z.array(z.string()).min(1)]) }),
   output: snapshotSchema,
 });
 export const toggleRpc = defineRpc({

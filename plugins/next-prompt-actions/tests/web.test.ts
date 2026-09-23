@@ -80,6 +80,66 @@ test("DOM button preserves code/copy/draft; sends once and cleans up on disable"
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+test("multiple prompts render one card each plus Send all, and hide the raw fence", async () => {
+  const block = "prompt: First.\nprompt: Second.";
+  const many: Snapshot = {
+    ...snapshot,
+    candidates: ["First.", "Second."].map((text, i) => ({
+      ...snapshot.candidates[0],
+      key: `key${i}`,
+      block,
+      text,
+      why: i ? undefined : "Pick **this** now.",
+    })),
+  };
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">${block}</span></div></div></body></html>`,
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const sent: (string | string[])[] = [];
+  const cleanup = install(
+    {
+      inspect: async () => many,
+      send: async (_scope, key) => {
+        sent.push(key);
+        return many;
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => context,
+  );
+  try {
+    await pause();
+    const labels = document.querySelectorAll(".npa-row .npa-label");
+    assert.deepEqual(
+      Array.from(labels, (label: Node) => label.textContent),
+      ["First.Pick this now.", "Second."],
+    );
+    assert.equal(document.querySelectorAll(".npa-why").length, 1);
+    assert.equal(document.querySelector(".npa-why strong")!.textContent, "this");
+    assert.equal(document.querySelectorAll(".npa-row .npa-edit").length, 3);
+    assert.equal(document.querySelector(".npa-all .npa-send")!.textContent, "Send all ↑");
+    const pre = document.querySelector('[data-paseo-markdown-tag="pre"]')!;
+    assert.equal(pre.getAttribute("data-npa-block"), "multiple");
+    assert.match(
+      document.querySelector("style")!.textContent!,
+      /\[data-npa-block\] > :not\(\[data-next-prompt-actions\]\) \{display:none!important;\}/,
+    );
+    document.querySelectorAll(".npa-send")[1].dispatchEvent(new window.Event("click"));
+    await pause();
+    document.querySelector(".npa-all .npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.deepEqual(sent, ["key1", ["key0", "key1"]]);
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
 test("Edit puts the prompt in the composer, replacing the draft, without sending", async () => {
   // Another conversation stays mounted with its own composer; the host marks the real field
   // with dataSet={{composerInput:""}}.

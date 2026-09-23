@@ -1,4 +1,5 @@
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
+import { joinPrompts } from "../shared/prompts";
 
 export interface Node {
   textContent: string | null;
@@ -92,9 +93,11 @@ export function desktopSupported() {
 
 type Controller = {
   inspect(scope: Scope): Promise<Snapshot>;
-  send(scope: Scope, key: string): Promise<Snapshot>;
+  send(scope: Scope, key: string | string[]): Promise<Snapshot>;
 };
 const OWNER = "data-next-prompt-actions";
+// Each prompt renders as its own card, so the shared fence box, raw `prompt:`/`why:` text, and its
+// copy button hide.
 const styles = `
 [${OWNER}] {display:flex;flex-direction:column;gap:8px;margin-top:10px;font:13px system-ui;line-height:1.4;}
 [${OWNER}] .npa-row {display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
@@ -106,6 +109,15 @@ const styles = `
 [${OWNER}] .npa-note {font-size:12px;opacity:.75;white-space:normal;overflow-wrap:anywhere;}
 [${OWNER}] .npa-note:empty {display:none;}
 [${OWNER}] .npa-label {flex:1;white-space:pre-wrap;overflow-wrap:anywhere;min-width:160px;}
+[${OWNER}] .npa-why {display:block;margin-top:2px;font-size:12px;opacity:.7;}
+[${OWNER}] .npa-why strong {font-weight:650;}
+[data-npa-block] {background:transparent!important;border-color:transparent!important;padding:0!important;}
+[data-npa-block] > :not([${OWNER}]) {display:none!important;}
+[data-npa-block] > [${OWNER}] {margin-top:0;gap:6px;}
+[data-npa-block] .npa-row {background:var(--npa-card,transparent);border:1px solid color-mix(in srgb,currentColor 12%,transparent);border-radius:8px;padding:8px 8px 8px 14px;gap:8px;transition:border-color .15s;}
+[data-npa-block] .npa-row:hover, [data-npa-block] .npa-row:focus-within {border-color:color-mix(in srgb,currentColor 40%,transparent);}
+[data-npa-block] button {min-height:30px;padding:5px 11px;}
+[data-npa-block] .npa-row.npa-all {background:none;border-color:transparent;padding-top:0;padding-bottom:0;}
 `;
 
 // The host marks the composer field with dataSet={{composerInput:""}}; the root testID is the
@@ -134,7 +146,7 @@ export function fillComposer(text: string, doc: Document, block?: Node): string 
   field.setSelectionRange?.(text.length, text.length);
   return field.value === text
     ? "Ready in the composer."
-    : "The composer did not accept the text; copy it from the block above.";
+    : "The composer did not accept the text; copy the prompt text above.";
 }
 
 export function install(controller: Controller, doc: Document = document, identify = binding) {
@@ -199,6 +211,7 @@ export function install(controller: Controller, doc: Document = document, identi
     const computed = typeof getComputedStyle === "function" ? getComputedStyle(block) : null;
     if (computed) {
       ui.style.setProperty("--npa-ink", computed.color);
+      ui.style.setProperty("--npa-card", computed.backgroundColor);
       ui.style.setProperty(
         "--npa-paper",
         computed.backgroundColor === "rgba(0, 0, 0, 0)" ? "#fff" : computed.backgroundColor,
@@ -226,6 +239,15 @@ export function install(controller: Controller, doc: Document = document, identi
         sends[index].disabled =
           latest.busy || candidate.state !== "ready" || latest.note === "Jev reviewing...";
       });
+      // The trailing pair acts on every prompt as one message, so it needs all of them unsent.
+      if (sends.length > next.length) {
+        edits[next.length].disabled = false;
+        sends[next.length].textContent = "Send all ↑";
+        sends[next.length].disabled =
+          latest.busy ||
+          next.some((c) => c.state !== "ready") ||
+          latest.note === "Jev reviewing...";
+      }
     }
     async function action(run: () => Promise<unknown>, label: string) {
       controls.flat().forEach((button) => {
@@ -243,34 +265,70 @@ export function install(controller: Controller, doc: Document = document, identi
         schedule();
       }
     }
-    for (const candidate of candidates) {
+    const items = candidates.map((c) => ({
+      text: c.text,
+      why: c.why,
+      key: c.key as string | string[],
+      all: false,
+    }));
+    if (candidates.length > 1)
+      items.push({
+        text: joinPrompts(candidates.map((c) => c.text)),
+        why: undefined,
+        key: candidates.map((c) => c.key),
+        all: true,
+      });
+    for (const item of items) {
+      const candidate = candidates[0];
       const row = doc.createElement("div");
-      row.setAttribute("class", "npa-row");
-      if (candidates.length > 1) {
+      row.setAttribute("class", item.all ? "npa-row npa-all" : "npa-row");
+      if (!item.all) {
         const label = doc.createElement("span");
         label.setAttribute("class", "npa-label");
-        label.textContent = candidate.text;
+        label.textContent = item.text;
+        if (item.why) {
+          const why = doc.createElement("span");
+          why.setAttribute("class", "npa-why");
+          // `**word**` marks the key outcome; odd split parts are the bold ones.
+          item.why.split(/\*\*(.+?)\*\*/).forEach((part, index) => {
+            if (!part) return;
+            const span = doc.createElement(index % 2 ? "strong" : "span");
+            span.textContent = part;
+            why.appendChild(span);
+          });
+          label.appendChild(why);
+        }
         row.appendChild(label);
       }
       const edit = doc.createElement("button");
       edit.setAttribute("type", "button");
       edit.setAttribute("class", "npa-edit");
-      edit.setAttribute("aria-label", `Edit suggested prompt in the composer: ${candidate.text}`);
-      edit.textContent = "Edit ↓";
+      edit.setAttribute(
+        "aria-label",
+        item.all
+          ? "Edit all suggested prompts in the composer"
+          : `Edit suggested prompt in the composer: ${item.text}`,
+      );
+      edit.textContent = item.all ? "Edit all ↓" : "Edit ↓";
       edit.addEventListener("click", () => {
         if (edit.disabled || !valid(block, context, candidate)) return;
-        note.textContent = fillComposer(candidate.text, doc, block);
+        note.textContent = fillComposer(item.text, doc, block);
       });
       edits.push(edit);
       row.appendChild(edit);
       const send = doc.createElement("button");
       send.setAttribute("type", "button");
       send.setAttribute("class", "npa-send");
-      send.setAttribute("aria-label", `Send suggested prompt: ${candidate.text}`);
+      send.setAttribute(
+        "aria-label",
+        item.all
+          ? "Send all suggested prompts as one message"
+          : `Send suggested prompt: ${item.text}`,
+      );
       send.addEventListener("click", () => {
         if (send.disabled || !valid(block, context, candidate)) return;
         send.textContent = "Sending...";
-        void action(() => controller.send(context, candidate.key), "Sending...");
+        void action(() => controller.send(context, item.key), "Sending...");
       });
       sends.push(send);
       row.appendChild(send);

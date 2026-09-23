@@ -1,8 +1,9 @@
 # Next prompt actions
 
 Send a fenced `prompt:` suggestion under `What Next` or `Next Steps` directly from its block.
-The desktop adapter preserves native Markdown, copy controls, and the composer draft.
-Send sits below the prompt, aligned to the bottom right at every window width.
+Each prompt renders as its own card with Edit and Send; the raw fence is hidden, not removed.
+An optional `why:` line under a prompt shows as its reason and is never sent.
+Several prompts also get Edit all and Send all for one numbered message. The composer draft is preserved.
 
 ![A multiline prompt with Send at the bottom right, after all prompt text.](../../docs/images/next-prompt-actions.png)
 

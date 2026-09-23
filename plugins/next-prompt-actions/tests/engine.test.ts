@@ -87,6 +87,26 @@ test("manual sends preserve exact text, and concurrent requests submit once", as
   assert.equal(f.sent[0].text, "Report results.");
   await assert.rejects(f.engine.send(scope, key));
 });
+test("Send all submits every prompt once as one numbered message", async () => {
+  const f = fixture();
+  f.current.rows[1].text =
+    "## Next Steps\n```\nprompt: One\nwhy: Reason.\nprompt: Two\n  line\n```";
+  const { candidates } = await f.engine.inspect(scope);
+  assert.deepEqual(
+    candidates.map((c) => c.why),
+    ["Reason.", undefined],
+  );
+  const keys = candidates.map((c) => c.key);
+  await assert.rejects(f.engine.send(scope, [keys[0], keys[0]]));
+  await f.engine.send(scope, keys);
+  assert.deepEqual(
+    f.sent.map((s) => s.text),
+    ["1. One\n2. Two\n     line"],
+  );
+  const states = (await f.engine.inspect(scope)).candidates.map((c) => c.state);
+  assert.deepEqual(states, ["sent", "sent"]);
+  await assert.rejects(f.engine.send(scope, keys[1]));
+});
 test("a new turn drops the previous turn's note", async () => {
   const f = fixture();
   await f.engine.send(scope, (await f.engine.inspect(scope)).candidates[0].key);
