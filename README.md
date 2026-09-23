@@ -3,7 +3,7 @@
 See what your agents are doing. Keep projects organized. Bring task context and
 workspace checks into Paseo without leaving your conversation.
 
-Nine independent local plugins. Install only what you need; each owns its
+Eleven independent local plugins. Install only what you need; each owns its
 dependencies, checks, and configuration.
 
 Gallery refreshed September 22, 2026 from Paseo desktop **0.9.0-beta.2**.
@@ -128,6 +128,23 @@ Gateway key and consume API quota.
 
 [Try a typed Jev evaluation →](plugins/jev-evaluator/README.md)
 
+## Keep threads tidy automatically
+
+Thread janitor archives idle threads with no confirmation dialog. By default a thread
+idle for more than 24 hours is archived; archiving stays reversible and never deletes
+agents, files, or worktrees. Sweeps run after `agent.turn_ended`/`agent.created` hooks
+and on a 30-minute timer, at most once per 10 minutes.
+
+[Configure Thread janitor →](plugins/thread-janitor/README.md)
+
+## Attach another thread's reply
+
+Thread context attach brings a Paseo thread's last reply into your composer through
+**+ → Thread**, replacing `/tmp` handoff files and copy-paste between Codex and Claude
+threads. Nothing sends automatically; review the composer and press Send yourself.
+
+[Set up Thread context attach →](plugins/thread-context-attach/README.md)
+
 See each plugin's documentation for client support and limitations, including
 Spaces' and Next prompt actions' private desktop adapters. Installed/running
 status alone does not prove every plugin action works.
@@ -145,6 +162,8 @@ status alone does not prove every plugin action works.
 | [watchtower-board](plugins/watchtower-board/README.md) | Browse read-only Watchtower tasks and attach task briefs in the composer. |
 | [workspace-preflight](plugins/workspace-preflight/README.md) | Discover workspace prerequisites, expose read-only MCP evidence, and optionally ask Jev for task relevance. |
 | [workspace-spaces](plugins/workspace-spaces/README.md) | Group projects with numbered Spaces in the desktop sidebar; standalone fallback on other clients. |
+| [thread-janitor](plugins/thread-janitor/README.md) | Archive idle threads automatically, with no confirmation dialog. |
+| [thread-context-attach](plugins/thread-context-attach/README.md) | Attach the last reply of another Paseo thread to your next message. |
 
 ## Install a plugin
 
