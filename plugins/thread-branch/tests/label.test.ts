@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { pillLabel, pillTitle } from "../client/label";
-import { describePrPill, describeRepoPill, describeSyncPill } from "../client/buttons";
+import {
+  describeBranchPill,
+  describePrPill,
+  describeRepoPill,
+  describeSyncPill,
+  syncState,
+} from "../client/buttons";
+import { syncIcons } from "../client/sync-icon";
 import type { BranchInfo } from "../shared/branch";
 
 const base: BranchInfo = {
@@ -70,23 +77,60 @@ test("repo pill shows the repository name and hides without a web remote", () =>
   assert.equal(pill.title, "Open https://github.com/o/r");
 });
 
-test("sync pill shows commits to push and pull, hidden when in sync or untracked", async () => {
-  let refreshed = 0;
+test("sync pill shows commits to push and pull, hidden only without an upstream", async () => {
+  let fetched = 0;
   const refresh = async () => {
-    refreshed += 1;
+    fetched += 1;
   };
   const tracked = { ...base, upstream: "origin/feat/board-avatars" };
   assert.equal(describeSyncPill(base, refresh).visible, false);
-  assert.equal(describeSyncPill({ ...tracked, ahead: 0, behind: 0 }, refresh).visible, false);
+  const inSync = describeSyncPill({ ...tracked, ahead: 0, behind: 0 }, refresh);
+  assert.equal(inSync.visible, true);
+  assert.equal(inSync.label, "Synced");
+  assert.equal(inSync.icon, syncIcons.synced);
+  assert.equal(inSync.title, "In sync vs origin/feat/board-avatars · click to fetch");
   const ahead = describeSyncPill({ ...tracked, ahead: 2, behind: 0 }, refresh);
   assert.equal(ahead.visible, true);
   assert.equal(ahead.label, "↑2 | ↓0");
-  assert.equal(ahead.title, "2 to push vs origin/feat/board-avatars · click to refresh");
+  assert.equal(ahead.icon, syncIcons.ahead);
+  assert.equal(ahead.title, "2 to push vs origin/feat/board-avatars · click to fetch");
   const both = describeSyncPill({ ...tracked, ahead: 2, behind: 3 }, refresh);
   assert.equal(both.label, "↑2 | ↓3");
-  assert.equal(both.title, "2 to push, 3 to pull vs origin/feat/board-avatars · click to refresh");
+  assert.equal(both.icon, syncIcons.behind);
+  assert.equal(both.title, "2 to push, 3 to pull vs origin/feat/board-avatars · click to fetch");
   assert.equal(describeSyncPill({ ...tracked, ahead: 0, behind: 1 }, refresh).label, "↑0 | ↓1");
   assert.equal(both.behavior.kind, "action");
   if (both.behavior.kind === "action") await both.behavior.onPress();
-  assert.equal(refreshed, 1);
+  assert.equal(fetched, 1);
+});
+
+test("branch menu offers Fetch only when the branch has an upstream", async () => {
+  let fetched = 0;
+  const actions = {
+    copy: async () => {},
+    fetch: async () => {
+      fetched += 1;
+    },
+    refresh: async () => {},
+  };
+  const fetchItem = (info: BranchInfo) => {
+    const pill = describeBranchPill(info, actions);
+    if (pill.behavior.kind !== "menu") throw new Error("expected a menu");
+    const item = pill.behavior.items.find((entry) => entry.kind === "item" && entry.id === "fetch");
+    if (item?.kind !== "item") throw new Error("missing Fetch item");
+    return item;
+  };
+  assert.equal(fetchItem(base).visible, false);
+  const tracked = fetchItem({ ...base, upstream: "origin/feat/board-avatars" });
+  assert.equal(tracked.visible, true);
+  assert.equal(tracked.title, "Fetch");
+  if (tracked.behavior.kind === "action") await tracked.behavior.onPress();
+  assert.equal(fetched, 1);
+});
+
+test("sync state puts pulling first", () => {
+  assert.equal(syncState(0, 0), "synced");
+  assert.equal(syncState(3, 0), "ahead");
+  assert.equal(syncState(0, 1), "behind");
+  assert.equal(syncState(3, 1), "behind");
 });

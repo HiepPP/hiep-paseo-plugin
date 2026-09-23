@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import type { BranchInfo } from "../shared/branch";
 
 const TIMEOUT = 8_000;
+const FETCH_TIMEOUT = 30_000;
 const PR_TTL = 5 * 60_000;
 
 interface Exec {
@@ -12,14 +13,14 @@ interface Exec {
 }
 
 // Fixed argv only; no shell, so cwd and branch names never reach an interpreter.
-function run(file: string, args: readonly string[], cwd: string): Promise<Exec> {
+function run(file: string, args: readonly string[], cwd: string, timeout = TIMEOUT): Promise<Exec> {
   return new Promise((resolve) => {
     execFile(
       file,
       [...args],
       {
         cwd,
-        timeout: TIMEOUT,
+        timeout,
         killSignal: "SIGKILL",
         maxBuffer: 1024 * 1024,
         env: {
@@ -119,9 +120,16 @@ export function createBranchReader() {
     return entry;
   }
 
-  async function read(cwd: string, force: boolean): Promise<BranchInfo> {
+  async function read(cwd: string, force: boolean, fetch: boolean): Promise<BranchInfo> {
     const inside = await run("git", ["rev-parse", "--is-inside-work-tree"], cwd);
     if (inside.code !== 0 || inside.stdout.trim() !== "true") return empty();
+    if (fetch) {
+      const fetched = await run("git", ["fetch", "--quiet"], cwd, FETCH_TIMEOUT);
+      if (fetched.code !== 0) {
+        const reason = fetched.stderr.trim().split("\n").pop() || "timed out or remote unreachable";
+        throw new Error(`git fetch failed: ${reason}`);
+      }
+    }
     const info = { ...empty(), repo: true };
     const symbolic = await run("git", ["symbolic-ref", "--short", "-q", "HEAD"], cwd);
     if (symbolic.code === 0 && symbolic.stdout.trim()) info.branch = symbolic.stdout.trim();
@@ -157,11 +165,11 @@ export function createBranchReader() {
   }
 
   return {
-    get(cwd: string, force = false) {
-      const key = `${force ? "f" : "c"}:${cwd}`;
+    get(cwd: string, force = false, fetch = false) {
+      const key = `${fetch ? "x" : force ? "f" : "c"}:${cwd}`;
       let pending = inflight.get(key);
       if (!pending) {
-        pending = read(cwd, force).finally(() => inflight.delete(key));
+        pending = read(cwd, force, fetch).finally(() => inflight.delete(key));
         inflight.set(key, pending);
       }
       return pending;

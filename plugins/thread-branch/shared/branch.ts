@@ -27,6 +27,11 @@ export type BranchInfo = z.infer<typeof branchInfoSchema>;
 
 export const getBranchRpc = defineRpc({
   name: "thread-branch.get",
-  input: z.object({ cwd: z.string().min(1), force: z.boolean().optional() }),
+  input: z.object({
+    cwd: z.string().min(1),
+    force: z.boolean().optional(),
+    /** Run `git fetch` before counting so `behind` reflects the remote. */
+    fetch: z.boolean().optional(),
+  }),
   output: branchInfoSchema,
 });

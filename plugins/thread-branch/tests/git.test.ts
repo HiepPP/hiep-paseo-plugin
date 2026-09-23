@@ -45,3 +45,34 @@ test("reads this repository and reports a non-git directory without throwing", a
   assert.equal(outside.repo, false);
   assert.equal(outside.pr, null);
 });
+
+test("fetch updates the behind count and reports fetch failures", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = await mkdtemp(join(tmpdir(), "thread-branch-"));
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd });
+  try {
+    git(root, "init", "-q", "--bare", "-b", "main", "remote.git");
+    git(root, "clone", "-q", "remote.git", "a");
+    git(join(root, "a"), "commit", "-q", "--allow-empty", "-m", "one");
+    git(join(root, "a"), "push", "-q", "-u", "origin", "main");
+    git(root, "clone", "-q", "remote.git", "b");
+    git(join(root, "b"), "commit", "-q", "--allow-empty", "-m", "two");
+    git(join(root, "b"), "push", "-q");
+
+    const reader = createBranchReader();
+    const a = join(root, "a");
+    assert.equal((await reader.get(a)).behind, 0);
+    const fetched = await reader.get(a, true, true);
+    assert.equal(fetched.behind, 1);
+    assert.equal(fetched.ahead, 0);
+
+    git(a, "remote", "set-url", "origin", join(root, "missing.git"));
+    await assert.rejects(reader.get(a, true, true), /git fetch failed/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

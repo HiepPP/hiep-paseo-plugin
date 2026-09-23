@@ -75,6 +75,9 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       async refresh() {
         await refreshCwd(cwd, true);
       },
+      async fetch() {
+        await refreshCwd(cwd, true, true);
+      },
     };
   }
 
@@ -85,7 +88,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       if (tracked.cwd !== cwd) continue;
       const actions = actionsFor(cwd);
       const branch = describeBranchPill(info, actions);
-      const sync = describeSyncPill(info, actions.refresh);
+      const sync = describeSyncPill(info, actions.fetch);
       const pr = describePrPill(info, actions.openPr);
       const repo = describeRepoPill(info, actions.openRepo);
       const existing = pills.get(agentId);
@@ -110,8 +113,9 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     }
   }
 
-  async function refreshCwd(cwd: string, force: boolean) {
-    const info = await client.rpc(getBranchRpc, force ? { cwd, force: true } : { cwd });
+  async function refreshCwd(cwd: string, force: boolean, fetch = false) {
+    const input = fetch ? { cwd, fetch: true } : force ? { cwd, force: true } : { cwd };
+    const info = await client.rpc(getBranchRpc, input);
     if (stopped) return;
     apply(cwd, info);
   }

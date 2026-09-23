@@ -1,10 +1,11 @@
 import type { PluginButton } from "@getpaseo/plugin/client";
 import type { BranchInfo } from "../shared/branch";
 import { pillLabel, pillTitle } from "./label";
+import { syncIcons, type SyncState } from "./sync-icon";
 
 export function describeBranchPill(
   info: BranchInfo,
-  actions: { copy(): Promise<void>; refresh(): Promise<void> },
+  actions: { copy(): Promise<void>; fetch(): Promise<void>; refresh(): Promise<void> },
 ): PluginButton {
   return {
     title: pillTitle(info),
@@ -23,6 +24,14 @@ export function describeBranchPill(
           behavior: { kind: "action", onPress: actions.copy },
         },
         { kind: "separator", id: "refresh-divider" },
+        {
+          kind: "item",
+          id: "fetch",
+          title: "Fetch",
+          icon: "CloudDownload",
+          visible: info.upstream !== null,
+          behavior: { kind: "action", onPress: actions.fetch },
+        },
         {
           kind: "item",
           id: "refresh",
@@ -65,19 +74,26 @@ export function describeRepoPill(info: BranchInfo, openRepo: () => Promise<void>
   };
 }
 
-/** `↑ahead | ↓behind` against the upstream; hidden when in sync or without an upstream. */
-export function describeSyncPill(info: BranchInfo, refresh: () => Promise<void>): PluginButton {
+/** Pull first: anything behind needs attention before pushing. */
+export function syncState(ahead: number, behind: number): SyncState {
+  if (behind > 0) return "behind";
+  return ahead > 0 ? "ahead" : "synced";
+}
+
+/** Green check when in sync, otherwise `↑ahead | ↓behind`; shown with an upstream so a click can fetch. */
+export function describeSyncPill(info: BranchInfo, fetch: () => Promise<void>): PluginButton {
   const ahead = info.ahead ?? 0;
   const behind = info.behind ?? 0;
+  const state = syncState(ahead, behind);
   const counts = [
     ahead > 0 ? `${ahead} to push` : null,
     behind > 0 ? `${behind} to pull` : null,
   ].filter(Boolean);
   return {
-    title: `${counts.join(", ") || "In sync"} vs ${info.upstream ?? "upstream"} · click to refresh`,
-    icon: "ArrowUpDown",
-    label: `↑${ahead} | ↓${behind}`,
-    visible: info.repo && info.upstream !== null && ahead + behind > 0,
-    behavior: { kind: "action", onPress: refresh },
+    title: `${counts.join(", ") || "In sync"} vs ${info.upstream ?? "upstream"} · click to fetch`,
+    icon: syncIcons[state],
+    label: state === "synced" ? "Synced" : `↑${ahead} | ↓${behind}`,
+    visible: info.repo && info.upstream !== null,
+    behavior: { kind: "action", onPress: fetch },
   };
 }

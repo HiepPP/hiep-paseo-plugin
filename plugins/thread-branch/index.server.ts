@@ -4,6 +4,8 @@ import { getBranchRpc } from "./shared/branch";
 
 export default function contribute(server: PluginServerContext) {
   const reader = createBranchReader();
-  server.handle(getBranchRpc, ({ cwd, force }) => reader.get(cwd, force === true));
+  server.handle(getBranchRpc, ({ cwd, force, fetch }) =>
+    reader.get(cwd, force === true || fetch === true, fetch === true),
+  );
   return () => {};
 }
