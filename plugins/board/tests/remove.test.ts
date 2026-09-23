@@ -143,3 +143,63 @@ test("running and finished children jump to their direct parent without removing
   }
   assert.equal(pills.size, 0);
 });
+
+test("Remove & New Thread removes first, then opens the project; never on failure or without cwd", async () => {
+  const pills = new Map<string, PluginComposerPillContribution>();
+  const started: string[] = [];
+  let removed = false;
+  const client = {
+    async rpc(contract: unknown) {
+      if (contract === boardRpc)
+        return {
+          observingSince: "scope",
+          runs: [
+            { id: "finished", agentId: "finished", status: "completed", cwd: "/repo" },
+            { id: "nocwd", agentId: "nocwd", status: "completed" },
+          ],
+        };
+      return { removed };
+    },
+    paseo: {
+      agents: { ref: () => ({ refresh: async () => ({ agent: { workspaceId: "workspace" } }) }) },
+    },
+    addComposerPill(pill: PluginComposerPillContribution) {
+      pills.set(pill.id, pill);
+      return {
+        update() {},
+        remove() {
+          pills.delete(pill.id);
+        },
+      };
+    },
+    openSurface() {
+      assert.fail("must open the project, not Board");
+    },
+  } as unknown as PluginClientContext;
+  const cleanup = installRemoveButtons(
+    client,
+    () => {},
+    (run) => started.push(run.id),
+  );
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual([...pills.keys()].sort(), [
+      "new-thread-finished",
+      "remove-finished",
+      "remove-nocwd",
+    ]);
+    const pill = pills.get("new-thread-finished")!;
+    assert.equal(pill.button.label, "Remove & New Thread");
+    const behavior = pill.button.behavior;
+    if (behavior.kind !== "action") return assert.fail("expected action");
+    await assert.rejects(async () => behavior.onPress(), /Run changed/);
+    assert.deepEqual(started, []);
+    removed = true;
+    await behavior.onPress();
+    assert.deepEqual(started, ["finished"]);
+    assert.deepEqual([...pills.keys()], ["remove-nocwd"]);
+  } finally {
+    cleanup();
+  }
+  assert.equal(pills.size, 0);
+});

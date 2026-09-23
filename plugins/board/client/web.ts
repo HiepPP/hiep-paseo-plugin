@@ -57,12 +57,16 @@ export function openNewWorkspaceForProject(input: {
   return true;
 }
 
+// Top-right stack order for the desktop thread actions.
+const STACK = ["Remove from Board", "Remove and Start New Thread", "Jump To Parent"];
+const STACK_SELECTOR = `:is(${STACK.map((label) => `[aria-label="${label}"]`).join(",")})`;
+
 // Keep Paseo's agent-scoped action and pending/error handling; only its desktop placement changes.
 export function installRemovePlacement() {
   if (Platform.OS !== "web" || typeof document === "undefined") return () => {};
   const css = document.createElement("style");
   css.textContent =
-    '[data-testid^="workspace-pane-"] [role="button"]:is([aria-label="Remove from Board"],[aria-label="Jump To Parent"]):not([data-board-remove-copy]){display:none!important}' +
+    `[data-testid^="workspace-pane-"] [role="button"]${STACK_SELECTOR}:not([data-board-remove-copy]){display:none!important}` +
     "[data-board-parent-copy], [data-board-parent-copy] *{color:#f97316!important}" +
     "[data-board-parent-copy]{border-color:#f97316!important}";
   document.head.appendChild(css);
@@ -74,9 +78,7 @@ export function installRemovePlacement() {
         copies.delete(source);
       }
     }
-    for (const source of document.querySelectorAll(
-      '[role="button"]:is([aria-label="Remove from Board"],[aria-label="Jump To Parent"] )',
-    )) {
+    for (const source of document.querySelectorAll(`[role="button"]${STACK_SELECTOR}`)) {
       if (source.getAttribute("data-board-remove-copy")) continue;
       const pane = source.closest('[data-testid^="workspace-pane-"]');
       const content = pane?.lastElementChild;
@@ -104,12 +106,14 @@ export function installRemovePlacement() {
         tab.appendChild(copy);
         copies.set(source, copy);
       }
-      if (source.getAttribute("aria-label") === "Jump To Parent") {
-        const remove = [
-          ...tab.querySelectorAll('[data-board-remove-copy][aria-label="Remove from Board"]'),
+      let top = 12;
+      for (const label of STACK.slice(0, STACK.indexOf(source.getAttribute("aria-label")!))) {
+        const above = [
+          ...tab.querySelectorAll(`[data-board-remove-copy][aria-label="${label}"]`),
         ][0];
-        copy.style.cssText += `;top:${remove ? 12 + remove.offsetHeight + 8 : 12}px;`;
+        if (above) top += above.offsetHeight + 8;
       }
+      copy.style.cssText += `;top:${top}px;`;
       const disabled = source.getAttribute("aria-disabled") === "true";
       if (copy.getAttribute("aria-disabled") !== String(disabled)) {
         copy.setAttribute("aria-disabled", String(disabled));

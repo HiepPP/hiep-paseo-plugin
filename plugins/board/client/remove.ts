@@ -1,11 +1,14 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
-import { boardRpc, removeRunRpc } from "../shared/board";
+import { boardRpc, removeRunRpc, type BoardRun } from "../shared/board";
 
 export function installRemoveButtons(
   client: PluginClientContext,
   openParent: (agentId: string) => void,
+  /** Omitted when this client cannot open the project's new-thread screen. */
+  startNewThread?: (run: BoardRun) => void,
 ) {
   const buttons = new Map<string, PluginButtonRegistration>();
+  const newThreadButtons = new Map<string, PluginButtonRegistration>();
   const parentButtons = new Map<string, PluginButtonRegistration>();
   const workspaces = new Map<string, string>();
   let stopped = false;
@@ -14,6 +17,8 @@ export function installRemoveButtons(
   const clear = () => {
     for (const button of buttons.values()) button.remove();
     buttons.clear();
+    for (const button of newThreadButtons.values()) button.remove();
+    newThreadButtons.clear();
     for (const button of parentButtons.values()) button.remove();
     parentButtons.clear();
     workspaces.clear();
@@ -53,6 +58,12 @@ export function installRemoveButtons(
           parentButtons.delete(id);
         }
       }
+      for (const [id, button] of newThreadButtons) {
+        if (!ids.has(id)) {
+          button.remove();
+          newThreadButtons.delete(id);
+        }
+      }
       for (const [id, button] of buttons) {
         if (!ids.has(id)) {
           button.remove();
@@ -89,6 +100,21 @@ export function installRemoveButtons(
             );
         }
         if (run.status === "running") continue;
+        const remove = async () => {
+          const result = await client.rpc(removeRunRpc, {
+            id: run.id,
+            observingSince: snapshot.observingSince,
+            endedAt: run.endedAt,
+          });
+          if (!result.removed) throw new Error("Run changed. Refresh and retry.");
+          revision++;
+          for (const registry of [buttons, newThreadButtons]) {
+            registry.get(run.id)?.remove();
+            registry.delete(run.id);
+          }
+          workspaces.delete(run.id);
+          return !stopped;
+        };
         const button = {
           title: "Remove from Board",
           label: "Remove",
@@ -96,17 +122,7 @@ export function installRemoveButtons(
           behavior: {
             kind: "action" as const,
             async onPress() {
-              const result = await client.rpc(removeRunRpc, {
-                id: run.id,
-                observingSince: snapshot.observingSince,
-                endedAt: run.endedAt,
-              });
-              if (!result.removed) throw new Error("Run changed. Refresh and retry.");
-              revision++;
-              buttons.get(run.id)?.remove();
-              buttons.delete(run.id);
-              workspaces.delete(run.id);
-              if (!stopped) client.openSurface("board");
+              if (await remove()) client.openSurface("board");
             },
           },
         };
@@ -123,6 +139,30 @@ export function installRemoveButtons(
             }),
           );
         }
+        if (!startNewThread || run.cwd === undefined) continue;
+        const newThreadButton = {
+          title: "Remove and Start New Thread",
+          label: "Remove & New Thread",
+          icon: "SquarePen",
+          behavior: {
+            kind: "action" as const,
+            async onPress() {
+              if (await remove()) startNewThread(run);
+            },
+          },
+        };
+        const existingNewThread = newThreadButtons.get(run.id);
+        if (existingNewThread) existingNewThread.update(newThreadButton);
+        else
+          newThreadButtons.set(
+            run.id,
+            client.addComposerPill({
+              id: `new-thread-${run.id}`,
+              workspaceId,
+              agentId: run.agentId,
+              button: newThreadButton,
+            }),
+          );
       }
     } catch {
       // Never offer Remove when the host cannot confirm finished Board membership.

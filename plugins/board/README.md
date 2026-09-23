@@ -19,7 +19,8 @@ Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin su
 - Each card represents one Paseo agent conversation. New turns update the same card and move it between columns.
 - Click a card to open its conversation on the selected host. Remove is a separate action and does not navigate.
 - Finished conversations also show a Remove button at the top-right of the thread on desktop (beside the composer on native clients). Successful removal returns to Board; failures keep the conversation open. Membership refreshes every two seconds.
-- Child conversations show **Jump To Parent** while running or finished. On desktop, the orange button sits directly below Remove (or in its place while running); it opens the direct parent without changing Board membership. Native clients show the action beside the composer.
+- Finished conversations also show **Remove & New Thread** directly below Remove on desktop. It removes the conversation from Board, then opens the New workspace screen for its project so you can prompt a new thread. Failed removal keeps the conversation open; native clients do not offer it.
+- Child conversations show **Jump To Parent** while running or finished. On desktop, the orange button sits below the Remove actions (or in their place while running); it opens the direct parent without changing Board membership. Native clients show the action beside the composer.
 - A removed conversation appears again when it starts a new turn. Status and duration describe the latest turn.
 - Remove hides a finished card, and its finished subagents, from Board on all connected clients. It never deletes or archives the agent or chat.
 - Running cards refresh from the host every two seconds while the page is open.
