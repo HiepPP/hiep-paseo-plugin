@@ -26,3 +26,7 @@
 - 2026-09-23: SDK 0.9.0-beta.2 agent snapshots have no `lastActivityAt`. Use the newest of `updatedAt` and `lastUserMessageAt`.
 - 2026-09-23: A local command hook rewrites a literal `npm run lint` and exits 1. Run `S=lint; npm run $S` to get the real oxlint result.
 - 2026-09-23: The Paseo sidebar lists workspaces, not agents. Archiving agents leaves their workspace rows visible. Archive the workspace too, but never a Paseo-owned worktree, because that can remove its directory.
+- 2026-09-23: An attachment item's `text` is built inside the search RPC, and there is no hook when the user selects an item. Slow work such as Jev must run in the background and be served from cache on a later search.
+- 2026-09-23: Jev is a judge, not a search engine. For finding the right thread or passage, use local search such as qmd. A Jev picker label was built, rejected by the user, and reverted.
+- 2026-09-23: qmd's launcher runs the first `node` on PATH, and its `better-sqlite3` module only loads on the Node it was built for (`~/.local/bin/node` v24). When spawning qmd from the daemon, keep the user's PATH order. Putting `/opt/homebrew/bin` first picks Node v25 and qmd exits 1.
+- 2026-09-23: A plugin gets a Paseo API only inside hooks and RPCs, not at load. Start startup work such as a backfill on the first hook or RPC.
