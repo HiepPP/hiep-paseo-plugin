@@ -10,6 +10,12 @@ there is something to pull. It hides when the branch has no upstream, and a clic
 then recounts. Between clicks the pull count reflects the last fetch;
 the 15-second poll never fetches.
 
+A links pill `3 links` lists the PRs (`#42`), commits (7–40 hex chars), and branches named in the
+agent's last reply and opens each on the `origin` remote (GitHub or GitLab routes). Branches count
+only as inline code after the word "branch", with a prefix like `feat/`, or as `main`/`master`/
+`develop`. The reply is re-read when a turn ends. Refs always resolve against this workspace's
+`origin`, so a ref from another repository opens the wrong page.
+
 The branch pill menu offers **Copy branch name**, **Fetch** (runs `git fetch`, shown when the branch
 has an upstream), and **Refresh**.
 A detached HEAD shows `@<short sha>`. Non-git directories show no pill.
