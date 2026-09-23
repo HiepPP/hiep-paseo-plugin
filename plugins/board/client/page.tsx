@@ -2,8 +2,17 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { boardRpc, removeRunRpc, starRunRpc, groupRuns, type BoardRun } from "../shared/board";
 import { boardColumns, type RunTree } from "../shared/tree";
 import { BoardSizeControl } from "./size-control";
@@ -78,6 +87,45 @@ function Spinner({ color, size }: { color: string; size: number }) {
     >
       <ActivityIndicator size="small" color={color} style={{ transform: [{ scale: size / 20 }] }} />
     </View>
+  );
+}
+
+/** Looping pulse that draws the eye to runs waiting for the user. */
+function AttentionPulse({
+  children,
+  style,
+  grow = 1.08,
+}: {
+  children?: ReactNode;
+  style?: ViewStyle;
+  grow?: number;
+}) {
+  const [pulse] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const step = (toValue: number) =>
+      Animated.timing(pulse, {
+        toValue,
+        duration: 700,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: Platform.OS !== "web",
+      });
+    const loop = Animated.loop(Animated.sequence([step(1), step(0)]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        style,
+        {
+          opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }),
+          transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, grow] }) }],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
@@ -412,18 +460,20 @@ function RunCard({
                   {run.provider}
                 </Text>
                 <Text style={{ color: colors.foregroundMuted, fontSize: s(10) }}>·</Text>
-                {running && !run.needsInput ? (
+                {run.needsInput ? (
+                  <AttentionPulse grow={1.2}>
+                    <Icon name="CircleAlert" size={s(12)} color={tone} />
+                  </AttentionPulse>
+                ) : running ? (
                   <Spinner color={colors.foregroundMuted} size={s(12)} />
                 ) : (
                   <Icon
                     name={
-                      run.needsInput
-                        ? "CircleAlert"
-                        : run.status === "completed"
-                          ? "CircleCheck"
-                          : run.status === "failed"
-                            ? "CircleX"
-                            : "CircleHelp"
+                      run.status === "completed"
+                        ? "CircleCheck"
+                        : run.status === "failed"
+                          ? "CircleX"
+                          : "CircleHelp"
                     }
                     size={s(12)}
                     color={tone}
@@ -524,21 +574,23 @@ function RunCard({
                 style={{ flexDirection: "row", alignItems: "center", gap: s(7), flexShrink: 1 }}
               >
                 {run.needsInput ? (
-                  <Text
-                    style={{
-                      color: colors.surface1,
-                      backgroundColor: colors.statusWarning,
-                      fontSize: s(11.5),
-                      lineHeight: s(15),
-                      fontWeight: "700",
-                      paddingHorizontal: s(7),
-                      paddingVertical: s(2),
-                      borderRadius: s(CONTROL_RADIUS - 2),
-                      overflow: "hidden",
-                    }}
-                  >
-                    Needs input
-                  </Text>
+                  <AttentionPulse>
+                    <Text
+                      style={{
+                        color: colors.surface1,
+                        backgroundColor: colors.statusWarning,
+                        fontSize: s(11.5),
+                        lineHeight: s(15),
+                        fontWeight: "700",
+                        paddingHorizontal: s(7),
+                        paddingVertical: s(2),
+                        borderRadius: s(CONTROL_RADIUS - 2),
+                        overflow: "hidden",
+                      }}
+                    >
+                      Needs input
+                    </Text>
+                  </AttentionPulse>
                 ) : running ? (
                   <Spinner color={tone} size={s(14)} />
                 ) : (
@@ -601,6 +653,18 @@ function RunCard({
           </Text>
         ) : null}
       </View>
+      {run.needsInput ? (
+        <AttentionPulse
+          grow={1}
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderWidth: 2,
+            borderColor: colors.statusWarning,
+            borderRadius: embedded ? 0 : s(subagent ? CARD_RADIUS - 3 : CARD_RADIUS - 1),
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -719,8 +783,8 @@ function RunCluster({ tree, compact, collapsed, onToggle, depth = 0, ...card }: 
         {!expanded && summaryColor ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: s(6) }}>
             {summary.needsInput ? (
-              <View
-                accessibilityElementsHidden
+              <AttentionPulse
+                grow={1.5}
                 style={{
                   width: s(6),
                   height: s(6),

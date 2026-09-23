@@ -23,6 +23,7 @@ runInNewContext(compiled, {
     if (id === "react")
       return {
         ...require("react"),
+        useEffect: () => {},
         useState: (initial: unknown) =>
           typeof initial === "number"
             ? [
@@ -31,7 +32,7 @@ runInNewContext(compiled, {
                   measuredPanelWidth = width;
                 },
               ]
-            : [initial, () => {}],
+            : [typeof initial === "function" ? initial() : initial, () => {}],
       };
     if (id === "react-native")
       return {
@@ -39,6 +40,15 @@ runInNewContext(compiled, {
         Text: "Text",
         Pressable: "Pressable",
         ActivityIndicator: "ActivityIndicator",
+        Animated: {
+          View: "Animated.View",
+          Value: class {
+            interpolate() {
+              return 0;
+            }
+          },
+        },
+        Easing: {},
         Platform: { OS: "web" },
       };
     return {};
