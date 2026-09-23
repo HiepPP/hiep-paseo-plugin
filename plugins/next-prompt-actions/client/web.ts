@@ -141,7 +141,11 @@ export function install(controller: Controller, doc: Document = document, identi
   let stopped = false,
     scheduled = false,
     running = false,
-    rescan = false;
+    rescan = false,
+    fresh = true;
+  // A streaming reply mutates the DOM constantly. Reuse the last timeline read unless a prompt
+  // block appeared or changed; the interval and user actions still force a fresh read.
+  const cache = new Map<string, { seen: Set<string>; snapshot: Promise<Snapshot> }>();
   let scanTimer: ReturnType<typeof setTimeout> | undefined;
   type Owned = {
     structure: string;
@@ -235,6 +239,7 @@ export function install(controller: Controller, doc: Document = document, identi
       } finally {
         const item = owned.get(block);
         if (item) item.state = "";
+        fresh = true;
         schedule();
       }
     }
@@ -293,8 +298,10 @@ export function install(controller: Controller, doc: Document = document, identi
       return;
     }
     running = true;
+    const refresh = fresh;
+    fresh = false;
     const found = new Set<Node>();
-    const snapshots = new Map<string, Promise<Snapshot>>();
+    const reads = new Set<string>();
     try {
       for (const assistant of Array.from(
         doc.querySelectorAll('[data-testid="assistant-message"]'),
@@ -304,28 +311,33 @@ export function install(controller: Controller, doc: Document = document, identi
         const blocks = Array.from(
           assistant.querySelectorAll('[data-paseo-markdown-tag="pre"]'),
         ).filter((b) => !b.closest('[data-paseo-markdown-tag="blockquote"]'));
-        if (
-          !blocks.some((b) =>
-            /^prompt:/i.test(
-              b.querySelector('[data-paseo-markdown-tag="code"]')?.textContent ?? "",
-            ),
-          )
-        )
-          continue;
+        const codes = blocks.map((b) =>
+          b
+            .querySelector('[data-paseo-markdown-tag="code"]')
+            ?.textContent?.replace(/\r\n/g, "\n")
+            .replace(/\n+$/, ""),
+        );
+        if (!codes.some((code) => /^prompt:/i.test(code ?? ""))) continue;
         const id = JSON.stringify([context.serverId, context.agentId, context.workspaceId]);
-        if (!snapshots.has(id)) snapshots.set(id, controller.inspect(context));
+        const key = JSON.stringify([context.message, context.timestamp, codes]);
+        let entry = cache.get(id);
+        if (!reads.has(id) && (refresh || !entry?.seen.has(key))) {
+          entry = { seen: new Set(), snapshot: controller.inspect(context) };
+          cache.set(id, entry);
+          reads.add(id);
+        }
+        if (!entry) continue;
+        entry.seen.add(key);
         let snapshot: Snapshot;
         try {
-          snapshot = await snapshots.get(id)!;
+          snapshot = await entry.snapshot;
         } catch {
+          cache.delete(id);
           continue;
         }
         if (stopped) break;
-        for (const block of blocks) {
-          const code = block
-            .querySelector('[data-paseo-markdown-tag="code"]')
-            ?.textContent?.replace(/\r\n/g, "\n")
-            .replace(/\n+$/, "");
+        for (const [index, block] of blocks.entries()) {
+          const code = codes[index];
           const candidates = snapshot.candidates.filter(
             (c) =>
               c.block === code &&
@@ -368,7 +380,10 @@ export function install(controller: Controller, doc: Document = document, identi
     if (foreign) schedule();
   });
   observer.observe(doc.body, { childList: true, subtree: true, characterData: true });
-  const timer = setInterval(schedule, 2500);
+  const timer = setInterval(() => {
+    fresh = true;
+    schedule();
+  }, 2500);
   schedule();
   return () => {
     stopped = true;

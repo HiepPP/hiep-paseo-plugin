@@ -287,3 +287,47 @@ test("Send and Edit update controls in place without extra timeline reads", asyn
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+
+test("streaming DOM changes reuse the last timeline read until a prompt block changes", async () => {
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Test UI.</span></div></div><div id="stream"></div></body></html>',
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  let reads = 0;
+  const cleanup = install(
+    {
+      inspect: async () => {
+        reads++;
+        return snapshot;
+      },
+      send: async () => snapshot,
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => context,
+  );
+  try {
+    await pause();
+    await pause();
+    const before = reads;
+    const stream = document.querySelector("#stream")!;
+    for (let i = 0; i < 5; i++) {
+      stream.appendChild(document.createTextNode(`token ${i} `));
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    await pause();
+    assert.equal(reads, before, "streaming tokens must not refetch the timeline");
+    assert.equal(document.querySelectorAll(".npa-send").length, 1);
+    stream.innerHTML =
+      '<div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Next step.</span></div></div>';
+    await pause();
+    assert.equal(reads, before + 1, "a new prompt block reads the timeline once");
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
