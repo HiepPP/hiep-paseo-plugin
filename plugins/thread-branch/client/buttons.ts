@@ -64,3 +64,20 @@ export function describeRepoPill(info: BranchInfo, openRepo: () => Promise<void>
     behavior: { kind: "action", onPress: openRepo },
   };
 }
+
+/** `↑ahead | ↓behind` against the upstream; hidden when in sync or without an upstream. */
+export function describeSyncPill(info: BranchInfo, refresh: () => Promise<void>): PluginButton {
+  const ahead = info.ahead ?? 0;
+  const behind = info.behind ?? 0;
+  const counts = [
+    ahead > 0 ? `${ahead} to push` : null,
+    behind > 0 ? `${behind} to pull` : null,
+  ].filter(Boolean);
+  return {
+    title: `${counts.join(", ") || "In sync"} vs ${info.upstream ?? "upstream"} · click to refresh`,
+    icon: "ArrowUpDown",
+    label: `↑${ahead} | ↓${behind}`,
+    visible: info.repo && info.upstream !== null && ahead + behind > 0,
+    behavior: { kind: "action", onPress: refresh },
+  };
+}

@@ -1,7 +1,7 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { copyText } from "@getpaseo/plugin/client/react-native";
 import { getBranchRpc, type BranchInfo } from "../shared/branch";
-import { describeBranchPill, describePrPill, describeRepoPill } from "./buttons";
+import { describeBranchPill, describePrPill, describeRepoPill, describeSyncPill } from "./buttons";
 import { openUrl } from "./open";
 
 export const POLL_MS = 15_000;
@@ -45,6 +45,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     string,
     {
       branch: PluginButtonRegistration;
+      sync: PluginButtonRegistration;
       pr: PluginButtonRegistration;
       repo: PluginButtonRegistration;
       signature: string;
@@ -84,6 +85,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       if (tracked.cwd !== cwd) continue;
       const actions = actionsFor(cwd);
       const branch = describeBranchPill(info, actions);
+      const sync = describeSyncPill(info, actions.refresh);
       const pr = describePrPill(info, actions.openPr);
       const repo = describeRepoPill(info, actions.openRepo);
       const existing = pills.get(agentId);
@@ -91,6 +93,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
         // Updating behavior closes an open menu; skip no-op updates from the poll loop.
         if (existing.signature === next) continue;
         existing.branch.update(branch);
+        existing.sync.update(sync);
         existing.pr.update(pr);
         existing.repo.update(repo);
         existing.signature = next;
@@ -99,6 +102,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
       const target = { workspaceId: tracked.workspaceId, agentId };
       pills.set(agentId, {
         branch: client.addComposerPill({ id: "thread-branch", ...target, button: branch }),
+        sync: client.addComposerPill({ id: "thread-branch-sync", ...target, button: sync }),
         pr: client.addComposerPill({ id: "thread-branch-pr", ...target, button: pr }),
         repo: client.addComposerPill({ id: "thread-branch-repo", ...target, button: repo }),
         signature: next,
@@ -145,6 +149,7 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
   function untrack(agentId: string, keepAgent = false) {
     const existing = pills.get(agentId);
     existing?.branch.remove();
+    existing?.sync.remove();
     existing?.pr.remove();
     existing?.repo.remove();
     pills.delete(agentId);
@@ -184,8 +189,9 @@ export function installBranchPills(client: Client, deps: PillDeps = {}) {
     stopped = true;
     clearTimeout(timer);
     unsubscribe();
-    for (const { branch, pr, repo } of pills.values()) {
+    for (const { branch, sync, pr, repo } of pills.values()) {
       branch.remove();
+      sync.remove();
       pr.remove();
       repo.remove();
     }

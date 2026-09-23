@@ -3,7 +3,9 @@
 Shows the current git branch of each conversation's working directory as a composer pill,
 beside Tasks and Subagents. When the branch has a pull request, a second pill `#42` appears;
 one click opens it in the system browser. A third pill named after the `origin` repository opens
-its web page (GitHub, GitLab, or any http/ssh remote).
+its web page (GitHub, GitLab, or any http/ssh remote). A sync pill `↑2 | ↓1` shows commits waiting
+to push and to pull against the upstream; it hides when in sync or when the branch has no upstream,
+and a click refreshes. The pull count reflects the last `git fetch`; the plugin does not fetch.
 
 The branch pill menu offers **Copy branch name** and **Refresh**.
 A detached HEAD shows `@<short sha>`. Non-git directories show no pill.
