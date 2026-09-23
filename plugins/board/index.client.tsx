@@ -5,6 +5,7 @@ import { installParentNavigation } from "./client/parent";
 import { installRemoveButtons } from "./client/remove";
 import { installRemovePlacement } from "./client/web";
 import { BoardPage } from "./client/page";
+import { OrbSettingsScreen } from "./client/orb-settings";
 import { installBoardShortcut } from "./client/shortcut";
 
 export default function contribute(client: PluginClientContext) {
@@ -14,6 +15,12 @@ export default function contribute(client: PluginClientContext) {
     title: "Board",
     icon: "Columns3",
     surface: "board",
+  });
+  const settings = client.addSettingsScreen({
+    id: "thinking-orb",
+    title: "Thinking orb",
+    icon: "Sparkles",
+    Component: OrbSettingsScreen,
   });
   const shortcut = installBoardShortcut(() => client.openSurface("board"));
   const removePlacement = installRemovePlacement();
@@ -30,6 +37,7 @@ export default function contribute(client: PluginClientContext) {
     parent.cleanup();
     newThread.cleanup();
     shortcut();
+    settings();
     sidebar();
     surface();
   };

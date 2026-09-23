@@ -1,5 +1,6 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { boardSize } from "./shared/board-size";
+import { orbSettings } from "./shared/orb";
 import { projectColors } from "./shared/project-colors";
 import { createRunStore } from "./server/store";
 import { listRunning } from "./server/snapshot";
@@ -8,6 +9,7 @@ import { boardRpc, removeRunRpc, starRunRpc } from "./shared/board";
 export default function contribute(server: PluginServerContext) {
   server.registerSettings(projectColors);
   server.registerSettings(boardSize);
+  server.registerSettings(orbSettings);
   const store = createRunStore();
   const controller = new AbortController();
   const removeStart = server.on("agent.turn_started", ({ agent, turnId }) =>

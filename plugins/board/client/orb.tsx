@@ -1,21 +1,21 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Platform, View } from "react-native";
 import { ThinkingOrb } from "thinking-orbs";
-import { isDarkSurface, orbPreset, sphereCanvas } from "../shared/orb";
+import { isDarkSurface, orbPreset, sphereCanvas, type OrbStateOption } from "../shared/orb";
 import { AgentAvatar } from "./avatar";
 
 /** thinking-orbs draws on a DOM canvas, so native keeps the avatar and host spinner. */
 export const orbSupported = Platform.OS === "web";
 
-const AVATAR_OPACITY = 0.55;
-
-/** A solving orb drawn at `size` px; a larger canvas overflows the box evenly on every side. */
+/** An orb drawn at `size` px; a larger canvas overflows the box evenly on every side. */
 export function Orb({
   size,
+  state,
   theme,
   color,
 }: {
   size: number;
+  state: OrbStateOption;
   theme: PluginSurfaceProps["theme"];
   /** Hex or rgb() ink tint; omitted keeps the orb monochrome. */
   color?: string;
@@ -29,7 +29,7 @@ export function Orb({
     >
       <ThinkingOrb
         aria-hidden
-        state="solving"
+        state={state}
         size={orb.size}
         theme={isDarkSurface(theme.colors.surface0) ? "dark" : "light"}
         color={color}
@@ -40,20 +40,25 @@ export function Orb({
 }
 
 /**
- * Running-card avatar: the bot fades into a circle whose edge is the orb's sphere silhouette,
+ * Running-card avatar: the bot sits in a circle whose edge is the orb's silhouette,
  * inside the same footprint as AgentAvatar.
  */
 export function OrbAvatar({
   agentId,
   size,
+  state,
+  opacity,
   theme,
 }: {
   agentId: string;
   size: number;
+  state: OrbStateOption;
+  /** 0–1 avatar opacity under the orb. */
+  opacity: number;
   theme: PluginSurfaceProps["theme"];
 }) {
   const avatar = size * 0.9;
-  const canvas = sphereCanvas(avatar);
+  const canvas = sphereCanvas(avatar, state);
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
       <View
@@ -62,14 +67,14 @@ export function OrbAvatar({
           height: avatar,
           borderRadius: avatar / 2,
           overflow: "hidden",
-          opacity: AVATAR_OPACITY,
+          opacity,
           filter: "saturate(0.6)",
         }}
       >
         <AgentAvatar agentId={agentId} size={avatar} />
       </View>
       <View style={{ position: "absolute", left: (size - canvas) / 2, top: (size - canvas) / 2 }}>
-        <Orb size={canvas} theme={theme} />
+        <Orb size={canvas} state={state} theme={theme} />
       </View>
     </View>
   );

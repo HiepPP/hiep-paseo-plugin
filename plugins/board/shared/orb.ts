@@ -1,3 +1,6 @@
+import { defineSettings } from "@getpaseo/plugin";
+import { z } from "zod";
+
 /** thinking-orbs ships separately tuned designs at these sizes; other sizes scale the nearest. */
 const ORB_PRESETS = [20, 32, 64] as const;
 
@@ -8,13 +11,40 @@ export function orbPreset(target: number): { size: (typeof ORB_PRESETS)[number];
   return { size, scale: target / size };
 }
 
-/** The solving (rubik) sphere spans 0.82 of the canvas: `R = (size / 2) * 0.82` in the engine. */
-const SOLVING_SPHERE = 0.82;
+/**
+ * Silhouette diameter as a fraction of the canvas, from each engine mode's `R = (size / 2) * k`.
+ * breathing (ring) and shaping (morph) are not round, so an avatar edge cannot follow them.
+ */
+const ORB_SPHERE = {
+  solving: 0.82,
+  working: 0.82,
+  searching: 0.82,
+  listening: 0.874,
+  weaving: 0.76,
+  composing: 0.78,
+  connecting: 0.8,
+} as const;
 
-/** Canvas size whose solving sphere silhouette has the given diameter. */
-export function sphereCanvas(diameter: number): number {
-  return diameter / SOLVING_SPHERE;
+export type OrbStateOption = keyof typeof ORB_SPHERE;
+export const ORB_STATES = Object.keys(ORB_SPHERE) as [OrbStateOption, ...OrbStateOption[]];
+
+/** Canvas size whose orb silhouette has the given diameter. */
+export function sphereCanvas(diameter: number, state: OrbStateOption): number {
+  return diameter / ORB_SPHERE[state];
 }
+
+export const orbSettings = defineSettings({
+  id: "thinking-orb",
+  scope: "host",
+  version: 1,
+  schema: z.object({
+    enabled: z.boolean().default(true),
+    state: z.enum(ORB_STATES).default("solving"),
+    avatarOpacity: z.number().int().min(20).max(100).multipleOf(10).default(100),
+  }),
+});
+
+export type OrbSettings = z.infer<typeof orbSettings.schema>;
 
 function channels(color: string): [number, number, number] | null {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];

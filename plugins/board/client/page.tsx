@@ -22,6 +22,7 @@ import { boardConnectionState } from "./connection";
 import { openNewWorkspaceForProject } from "./web";
 import { AgentAvatar } from "./avatar";
 import { Orb, OrbAvatar, orbSupported } from "./orb";
+import { orbSettings, type OrbSettings } from "../shared/orb";
 
 const SECOND = 1_000;
 // Shape lock: cards 12, controls and chips 8.
@@ -212,7 +213,10 @@ function RunCard({
   subagent = false,
   inheritedProject = false,
   removeCount = 1,
+  orb,
 }: {
+  /** Saved thinking-orb settings; null until loaded, which keeps the host spinner. */
+  orb: OrbSettings | null;
   /** Rendered inside a cluster card: no own border. */
   embedded?: boolean;
   /** Compact two-line card inside the parent subagent panel. */
@@ -241,7 +245,7 @@ function RunCard({
   const colors = theme.colors;
   const running = run.status === "running";
   // Web shows running work as a thinking orb; native keeps the avatar and host spinner.
-  const thinking = orbSupported && running && !run.needsInput;
+  const thinking = orbSupported && orb?.enabled && running && !run.needsInput ? orb : null;
   const duration = runDuration(run, now);
   const tone = run.needsInput
     ? colors.statusWarning
@@ -467,7 +471,12 @@ function RunCard({
                     <Icon name="CircleAlert" size={s(12)} color={tone} />
                   </AttentionPulse>
                 ) : thinking ? (
-                  <Orb size={s(12)} theme={theme} color={colors.foregroundMuted} />
+                  <Orb
+                    size={s(12)}
+                    state={thinking.state}
+                    theme={theme}
+                    color={colors.foregroundMuted}
+                  />
                 ) : running ? (
                   <Spinner color={colors.foregroundMuted} size={s(12)} />
                 ) : (
@@ -521,7 +530,13 @@ function RunCard({
             >
               <View pointerEvents="none">
                 {thinking ? (
-                  <OrbAvatar agentId={run.agentId} size={s(40)} theme={theme} />
+                  <OrbAvatar
+                    agentId={run.agentId}
+                    size={s(40)}
+                    state={thinking.state}
+                    opacity={thinking.avatarOpacity / 100}
+                    theme={theme}
+                  />
                 ) : (
                   <AgentAvatar agentId={run.agentId} size={s(40)} />
                 )}
@@ -861,6 +876,7 @@ function RunCluster({ tree, compact, collapsed, onToggle, depth = 0, ...card }: 
 }
 
 function RunColumn({
+  orb,
   projectPalette,
   title,
   trees,
@@ -876,6 +892,7 @@ function RunColumn({
   onStar,
   scale,
 }: {
+  orb: OrbSettings | null;
   scale: number;
   projectPalette: Record<string, number>;
   title: string;
@@ -910,6 +927,7 @@ function RunColumn({
       onRemove={onRemove}
       onOpen={onOpen}
       onStar={onStar}
+      orb={orb}
     />
   );
   const hueOf = (project: { runs: BoardRun[] }) => {
@@ -1087,6 +1105,8 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
   const savingPalette = useRef(false);
   // Host settings keep the size across plugin reloads and restarts without changing host appearance.
   const sizeSettings = useSettings(boardSize);
+  const orbConfig = useSettings(orbSettings);
+  const orb = orbConfig.status === "ready" ? orbConfig.values : null;
   const savingSize = useRef(false);
   const failedSize = useRef<number | null>(null);
   // Latest unsaved choice; saved one write at a time so rapid clicks never reuse a stale revision.
@@ -1445,6 +1465,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
               }}
             >
               <RunColumn
+                orb={orb}
                 projectPalette={projectPalette}
                 scale={scale}
                 title="Running"
@@ -1468,6 +1489,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 />
               )}
               <RunColumn
+                orb={orb}
                 projectPalette={projectPalette}
                 scale={scale}
                 title="Just finished"
