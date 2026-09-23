@@ -5,8 +5,11 @@ Requires Paseo daemon and client 0.8.0+, Node 22+, and enabled trusted plugins.
 
 ## Use
 
-Open the workspace Command Center and choose **Open Watchtower board**.
-Watchtower opens only in Explorer, beside **Files** and **Changes**, for the current workspace.
+With a thread open, click **Watchtower** in the sidebar, below **Board**, or choose
+**Open Watchtower board** in the Command Center. Both open the board in Explorer, beside
+**Files** and **Changes**, for the current workspace. On desktop and web the sidebar item is
+disabled outside a thread, such as on the Board page. Mobile keeps a sidebar page that picks
+a workspace from a row sorted by recent activity.
 The header identifies its project. Each workspace keeps its own board and task selection.
 The board reads `watchtower/NEXT.md` in that workspace, not another checkout or its parent repository.
 The panel summarizes completion and counts for Active, Blocked, Todo, and Done tasks.
