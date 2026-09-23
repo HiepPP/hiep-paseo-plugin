@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 import { binding, install, type Node, type Binding } from "../client/web";
 import type { Snapshot } from "../shared/contracts";
+import { Engine, type Current } from "../server/engine";
+import { Store } from "../server/store";
 
 const context: Binding = {
   agentId: "a",
@@ -90,6 +92,72 @@ test("React identity fails closed on streaming or missing scope", () => {
   props.phase = "streaming";
   assert.equal(binding(node as unknown as Node), null);
   assert.equal(binding({} as Node), null);
+});
+
+test("a new turn's unsent block renders no note from the previous send", async () => {
+  const scope = { serverId: "h", workspaceId: "w", agentId: "a" };
+  const next = "## Next Steps\n```\nprompt: Report the next results.\n```";
+  const current: Current = {
+    epoch: "one",
+    busy: false,
+    complete: true,
+    rows: [
+      { type: "user_message", text: "Report test results.", id: "0", timestamp: 1 },
+      {
+        type: "assistant_message",
+        text: "## Next Steps\n```\nprompt: Report results.\n```",
+        id: "1",
+        timestamp: 2,
+      },
+    ],
+  };
+  let engine!: Engine;
+  const driver = {
+    async read() {
+      return structuredClone(current);
+    },
+    // The daemon starts the turn before acknowledging the send.
+    async send() {
+      engine.started(scope.agentId);
+    },
+  };
+  engine = new Engine(new Store(), driver, async () => true);
+  const key = (await engine.inspect(scope)).candidates[0].key;
+  await engine.send(scope, key);
+  current.rows.push(
+    { type: "user_message", text: "Report results.", id: "2", timestamp: 3 },
+    { type: "assistant_message", text: next, id: "3", timestamp: 4 },
+  );
+
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Report the next results.</span></div></div></body></html>',
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    {
+      inspect: (input) => engine.inspect(input),
+      send: async (input, sendKey) => {
+        await engine.send(input, sendKey);
+        return engine.inspect(input);
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...scope, message: next, timestamp: 4 }),
+  );
+  try {
+    await pause();
+    assert.equal(document.querySelectorAll(".npa-send").length, 1);
+    assert.equal(document.querySelector(".npa-send")!.textContent, "Send ↑");
+    assert.equal(document.querySelector(".npa-note")!.textContent, "");
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
 });
 
 test("new completed prompt renders promptly after a previous scan", async () => {

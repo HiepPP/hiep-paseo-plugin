@@ -26,13 +26,22 @@ export class Engine {
   private generations = new Map<string, number>();
   private eligible = new Set<string>();
   private controllers = new Map<string, AbortController>();
-  private notes = new Map<string, string>();
+  private notes = new Map<string, { generation: number; text: string }>();
   private stopped = false;
   constructor(
     readonly store: Store,
     private driver: Driver,
     private judge: Judge,
   ) {}
+
+  private gen(id: string) {
+    return this.generations.get(id) ?? 0;
+  }
+  // A note describes one turn. Stamping the turn it was computed for keeps a late
+  // acknowledgement, which can land after the next turn already started, from surfacing there.
+  private note(id: string, text: string, generation = this.gen(id)) {
+    this.notes.set(id, { generation, text });
+  }
 
   private candidates(scope: Scope, current: Current): Candidate[] {
     const user = current.rows.findLastIndex((r) => r.type === "user_message");
@@ -57,10 +66,11 @@ export class Engine {
 
   async inspect(scope: Scope): Promise<Snapshot> {
     const current = await this.driver.read(scope);
+    const note = this.notes.get(scope.agentId);
     return {
       enabled: this.store.get(scope.agentId).enabled,
       busy: current.busy || this.locks.has(scope.agentId),
-      note: this.notes.get(scope.agentId) ?? "",
+      note: note?.generation === this.gen(scope.agentId) ? note.text : "",
       candidates: this.candidates(scope, current),
     };
   }
@@ -73,7 +83,7 @@ export class Engine {
     const entry = this.store.get(scope.agentId);
     entry.enabled = enabled;
     entry.remaining = 0;
-    this.notes.set(
+    this.note(
       scope.agentId,
       enabled ? "Jev enabled for the next new turn. Up to 3 continuations." : "Jev auto-run OFF",
     );
@@ -81,6 +91,8 @@ export class Engine {
     return this.inspect(scope);
   }
   private invalidate(id: string) {
+    // The note describes one turn only; it must never outlive it on a later prompt block.
+    this.notes.delete(id);
     this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
     this.controllers.get(id)?.abort();
     this.controllers.delete(id);
@@ -125,6 +137,9 @@ export class Engine {
         entry.autoMessageIds.push(messageId, `text:${hash(candidate.text)}`);
       } else this.invalidate(scope.agentId);
       this.store.save();
+      // The turn can start before the acknowledgement returns; this note belongs to the turn
+      // the prompt was dispatched from, never to the one it launches.
+      const stamp = this.gen(scope.agentId);
       try {
         const dispatchGeneration = this.generations.get(scope.agentId);
         await this.driver.send(
@@ -137,13 +152,14 @@ export class Engine {
             (!automatic || entry.enabled),
         );
         entry.handled[key] = "sent";
-        this.notes.set(scope.agentId, automatic ? "Jev approved; prompt sent." : "Prompt sent.");
+        this.note(scope.agentId, automatic ? "Jev approved; prompt sent." : "Prompt sent.", stamp);
       } catch {
         entry.handled[key] = "unknown";
         entry.remaining = 0;
-        this.notes.set(
+        this.note(
           scope.agentId,
           "Send acknowledgement unknown. Check the conversation; no automatic retry.",
+          stamp,
         );
       }
       this.store.save();
@@ -161,6 +177,7 @@ export class Engine {
     const entry = this.store.get(scope.agentId);
     if (!entry.enabled) return;
     const generation = this.generations.get(scope.agentId);
+    const stamp = this.gen(scope.agentId);
     const controller = new AbortController();
     this.controllers.set(scope.agentId, controller);
     try {
@@ -176,9 +193,10 @@ export class Engine {
       }
       const candidates = this.candidates(scope, current).filter((c) => c.state === "ready");
       if (candidates.length !== 1 || entry.remaining === 0 || !entry.scope) {
-        this.notes.set(
+        this.note(
           scope.agentId,
           "Manual review: no single next step, or continuation limit reached.",
+          stamp,
         );
         entry.remaining = 0;
         this.store.save();
@@ -188,7 +206,7 @@ export class Engine {
       if (entry.evaluated.includes(candidate.key)) return;
       entry.evaluated.push(candidate.key);
       this.store.save();
-      this.notes.set(scope.agentId, "Jev reviewing...");
+      this.note(scope.agentId, "Jev reviewing...", stamp);
       const context = current.rows
         .filter((r) => r.type === "user_message" && r.text)
         .map((r) => r.text!);
@@ -205,9 +223,10 @@ export class Engine {
       if (!allowed) {
         entry.remaining = 0;
         this.store.save();
-        this.notes.set(
+        this.note(
           scope.agentId,
           "Manual review: Jev did not confirm a suitable, authorized continuation.",
+          stamp,
         );
         return;
       }
@@ -216,7 +235,7 @@ export class Engine {
       entry.remaining = 0;
       this.store.save();
       if (!controller.signal.aborted)
-        this.notes.set(scope.agentId, "Manual review: evaluation or state check failed.");
+        this.note(scope.agentId, "Manual review: evaluation or state check failed.", stamp);
     } finally {
       if (this.controllers.get(scope.agentId) === controller)
         this.controllers.delete(scope.agentId);

@@ -47,6 +47,7 @@ function fixture(judge: Judge = async () => true) {
   };
   const sent: { text: string; id: string }[] = [];
   let rejectSend = false;
+  let duringSend: (() => void) | undefined;
   const store = new Store();
   const driver = {
     async read() {
@@ -54,6 +55,7 @@ function fixture(judge: Judge = async () => true) {
     },
     async send(_scope: unknown, text: string, id: string) {
       sent.push({ text, id });
+      duringSend?.();
       if (rejectSend) throw new Error("connection lost");
     },
   };
@@ -72,6 +74,9 @@ function fixture(judge: Judge = async () => true) {
     failSend() {
       rejectSend = true;
     },
+    onSend(callback: () => void) {
+      duringSend = callback;
+    },
   };
 }
 test("manual sends preserve exact text, and concurrent requests submit once", async () => {
@@ -81,6 +86,48 @@ test("manual sends preserve exact text, and concurrent requests submit once", as
   assert.equal(f.sent.length, 1);
   assert.equal(f.sent[0].text, "Report results.");
   await assert.rejects(f.engine.send(scope, key));
+});
+test("a new turn drops the previous turn's note", async () => {
+  const f = fixture();
+  await f.engine.send(scope, (await f.engine.inspect(scope)).candidates[0].key);
+  assert.equal((await f.engine.inspect(scope)).note, "Prompt sent.");
+  f.engine.started("agent");
+  f.current.rows.push(
+    { type: "user_message", text: "Report results.", id: "2", timestamp: 3 },
+    {
+      type: "assistant_message",
+      text: "## Next Steps\n```\nprompt: Report the next results.\n```",
+      id: "3",
+      timestamp: 4,
+    },
+  );
+  const snapshot = await f.engine.inspect(scope);
+  assert.equal(snapshot.note, "");
+  assert.equal(snapshot.candidates.length, 1);
+  assert.equal(snapshot.candidates[0].state, "ready");
+});
+test("a turn starting before the send acknowledgement leaves no note behind", async () => {
+  const f = fixture();
+  // The daemon starts the turn while handle.send is still awaiting its acknowledgement.
+  f.onSend(() => f.engine.started("agent"));
+  const key = (await f.engine.inspect(scope)).candidates[0].key;
+  await f.engine.send(scope, key);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.store.get("agent").handled[key], "sent");
+  assert.equal((await f.engine.inspect(scope)).note, "");
+  f.current.rows.push(
+    { type: "user_message", text: "Report results.", id: "2", timestamp: 3 },
+    {
+      type: "assistant_message",
+      text: "## Next Steps\n```\nprompt: Report the next results.\n```",
+      id: "3",
+      timestamp: 4,
+    },
+  );
+  const snapshot = await f.engine.inspect(scope);
+  assert.equal(snapshot.note, "");
+  assert.equal(snapshot.candidates.length, 1);
+  assert.equal(snapshot.candidates[0].state, "ready");
 });
 test("reject stale, busy, incomplete, and non-assistant suggestions", async () => {
   const f = fixture();
