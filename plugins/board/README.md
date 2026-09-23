@@ -5,7 +5,7 @@ Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin su
 
 ## Behavior
 
-- Use **UI size − / +** in the Board header to scale Board text, cards, and spacing from 10% to 150% in 10% steps. Click the percentage to reset to 100%. The control sits in a fixed toolbar outside the scrolling, scaled content, keeping its size and click position unchanged; Paseo navigation and other pages are unaffected. The preference lasts until the client/plugin reloads.
+- Use **UI size − / +** in the Board header to scale Board text, cards, and spacing from 10% to 200% in 10% steps. 100% is the compact default (the former 70%). Click the percentage to reset to 100%. The control sits in a fixed toolbar outside the scrolling, scaled content, keeping its size and click position unchanged; Paseo navigation and other pages are unaffected. The size is saved in host settings, so it survives plugin reloads and app restarts and is shared by clients of the same host.
 
 - Parent and subagent conversations form nested clusters with a **subagents** toggle. Clusters start expanded; collapse state lasts while Board stays mounted, including refreshes and column changes. Compact layouts use a smaller indent. Collapsed groups summarize how many members are running or need input; subagent cards omit the project row when it matches the parent.
 - Relationships come from Paseo parent metadata, never titles or project names. Missing or removed parents leave their children visible as standalone cards. Provider-internal subagents without a separate Paseo conversation are not listed.

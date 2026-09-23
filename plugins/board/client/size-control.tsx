@@ -1,5 +1,11 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Pressable, Text, View } from "react-native";
+import {
+  BOARD_SIZE_DEFAULT,
+  BOARD_SIZE_MAX,
+  BOARD_SIZE_MIN,
+  BOARD_SIZE_STEP,
+} from "../shared/board-size";
 
 export function BoardSizeControl({
   size,
@@ -25,14 +31,24 @@ export function BoardSizeControl({
         }}
       >
         {[
-          { label: "Decrease Board UI size", text: "−", value: size - 10, disabled: size <= 10 },
           {
-            label: `Board UI size ${size}%. Reset to 100%`,
+            label: "Decrease Board UI size",
+            text: "−",
+            value: size - BOARD_SIZE_STEP,
+            disabled: size <= BOARD_SIZE_MIN,
+          },
+          {
+            label: `Board UI size ${size}%. Reset to ${BOARD_SIZE_DEFAULT}%`,
             text: `${size}%`,
-            value: 100,
+            value: BOARD_SIZE_DEFAULT,
             disabled: false,
           },
-          { label: "Increase Board UI size", text: "+", value: size + 10, disabled: size >= 150 },
+          {
+            label: "Increase Board UI size",
+            text: "+",
+            value: size + BOARD_SIZE_STEP,
+            disabled: size >= BOARD_SIZE_MAX,
+          },
         ].map((item, index) => (
           <Pressable
             key={index}

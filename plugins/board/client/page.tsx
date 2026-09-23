@@ -16,14 +16,13 @@ import {
 import { boardRpc, removeRunRpc, starRunRpc, groupRuns, type BoardRun } from "../shared/board";
 import { boardColumns, type RunTree } from "../shared/tree";
 import { BoardSizeControl } from "./size-control";
+import { BOARD_SIZE_DEFAULT, boardScale, boardSize, clampBoardSize } from "../shared/board-size";
 import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
 import { openNewWorkspaceForProject } from "./web";
 import { AgentAvatar } from "./avatar";
 
 const SECOND = 1_000;
-// Retain size across navigation without changing host appearance.
-let boardSize = 100;
 // Shape lock: cards 12, controls and chips 8.
 const CARD_RADIUS = 12;
 const CONTROL_RADIUS = 8;
@@ -1077,12 +1076,35 @@ function RunColumn({
 export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProps) {
   const palette = useSettings(projectColors);
   const savingPalette = useRef(false);
-  const [size, setSize] = useState(boardSize);
-  const scale = size / 100;
+  // Host settings keep the size across plugin reloads and restarts without changing host appearance.
+  const sizeSettings = useSettings(boardSize);
+  const savingSize = useRef(false);
+  const failedSize = useRef<number | null>(null);
+  // Latest unsaved choice; saved one write at a time so rapid clicks never reuse a stale revision.
+  const [pendingSize, setPendingSize] = useState<number | null>(null);
+  const storedSize = sizeSettings.status === "ready" ? sizeSettings.values.size : null;
+  const size = pendingSize ?? storedSize ?? BOARD_SIZE_DEFAULT;
+  const scale = boardScale(size);
   const changeSize = (value: number) => {
-    boardSize = Math.max(10, Math.min(150, value));
-    setSize(boardSize);
+    failedSize.current = null;
+    setPendingSize(clampBoardSize(value));
   };
+  useEffect(() => {
+    if (pendingSize === null || sizeSettings.status !== "ready") return;
+    if (sizeSettings.saving || savingSize.current) return;
+    if (pendingSize === storedSize) return setPendingSize(null);
+    // Retry a failed value only after the user picks a size again.
+    if (failedSize.current === pendingSize) return;
+    savingSize.current = true;
+    void sizeSettings
+      .save({ size: pendingSize }, sizeSettings.revision)
+      .then((saved) => {
+        failedSize.current = saved ? null : pendingSize;
+      })
+      .finally(() => {
+        savingSize.current = false;
+      });
+  }, [pendingSize, sizeSettings]);
   const readBoard = useRpc(boardRpc);
   const removeRun = useRpc(removeRunRpc);
   const setStarred = useRpc(starRunRpc);

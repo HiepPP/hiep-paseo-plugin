@@ -16,7 +16,7 @@ The Next prompt actions image is the earlier synthetic-text capture from desktop
 
 Board puts running and recently finished conversations side by side, grouped into
 distinct pastel project blocks with bot avatars. Star a conversation to keep its
-cluster above project groups; scale the board from 10% to 150% with **UI size**.
+cluster above project groups; scale the board from 10% to 200% with **UI size**.
 
 ![Privacy-edited Board preview with pastel project groups, bot avatars, running and finished states, and UI size controls.](docs/images/board.png)
 
