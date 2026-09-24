@@ -93,14 +93,15 @@ export function desktopSupported() {
 
 type Controller = {
   inspect(scope: Scope): Promise<Snapshot>;
-  send(scope: Scope, key: string | string[]): Promise<Snapshot & { sent?: boolean }>;
-  /** Runs after a clicked send is acknowledged. */
-  sent?(): Promise<void>;
+  send(scope: Scope, key: string | string[]): Promise<{ sent: boolean }>;
+  /** Runs on click with the pending outcome, so navigation need not wait for the send. */
+  sending?(outcome: Promise<boolean>): void;
 };
-// The Board plugin listens for this event; plugin surfaces cannot open another plugin's surface.
-export function openBoard(doc: Document = document) {
+// The Board plugin listens for these events; plugin surfaces cannot open another plugin's surface.
+export type BoardEvent = "paseo-board:open" | "paseo-board:sent" | "paseo-board:send-failed";
+export function boardEvent(name: BoardEvent, doc: Document = document) {
   const view = doc.defaultView;
-  if (view) doc.dispatchEvent(new view.Event("paseo-board:open"));
+  if (view) doc.dispatchEvent(new view.Event(name));
 }
 const OWNER = "data-next-prompt-actions";
 // Each prompt renders as its own card, so the shared fence box, raw `prompt:`/`why:` text, and its
@@ -336,7 +337,9 @@ export function install(controller: Controller, doc: Document = document, identi
         if (send.disabled || !valid(block, context, candidate)) return;
         send.textContent = "Sending...";
         void action(async () => {
-          if ((await controller.send(context, item.key)).sent) await controller.sent?.();
+          const outcome = controller.send(context, item.key);
+          controller.sending?.(outcome.then((r) => r.sent).catch(() => false));
+          await outcome;
         }, "Sending...");
       });
       sends.push(send);

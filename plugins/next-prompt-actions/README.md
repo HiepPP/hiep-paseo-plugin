@@ -19,8 +19,9 @@ Browser and native mobile clients receive no DOM contribution.
 ## Back to Board after send
 
 Settings → Next prompt actions → Back to Board after send. Host setting; defaults OFF.
-When ON, a manual Send or Send all opens the Board after every clicked prompt is acknowledged as sent.
-Failed or uncertain sends stay in the conversation. Requires the `board` plugin, which listens for `paseo-board:open`.
+When ON, a manual Send or Send all opens the Board at once while the send finishes in the background.
+The Board refreshes when the send is acknowledged and shows a warning toast if it failed or is uncertain.
+Requires the `board` plugin, which listens for `paseo-board:open`, `paseo-board:sent`, and `paseo-board:send-failed`.
 
 ## Jev auto-run
 

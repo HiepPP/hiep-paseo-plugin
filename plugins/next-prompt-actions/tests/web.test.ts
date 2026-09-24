@@ -48,7 +48,7 @@ test("DOM button preserves code/copy/draft; sends once and cleans up on disable"
       send: async (_scope, key) => {
         assert.equal(key, "key");
         sends++;
-        return snapshot;
+        return { sent: true };
       },
     },
     document as unknown as Parameters<typeof install>[1],
@@ -106,7 +106,7 @@ test("multiple prompts render one card each plus Send all, and hide the raw fenc
       inspect: async () => many,
       send: async (_scope, key) => {
         sent.push(key);
-        return many;
+        return { sent: true };
       },
     },
     document as unknown as Parameters<typeof install>[1],
@@ -140,7 +140,7 @@ test("multiple prompts render one card each plus Send all, and hide the raw fenc
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
-test("the sent hook runs only after the send is acknowledged", async () => {
+test("sending hook runs on click, before the acknowledgement, with its outcome", async () => {
   const { document, window } = parseHTML(
     '<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Test UI.</span></div></div></body></html>',
   );
@@ -149,16 +149,13 @@ test("the sent hook runs only after the send is acknowledged", async () => {
     value: window.MutationObserver,
     configurable: true,
   });
-  let outcome: "sent" | "unknown" = "unknown";
-  let hooks = 0;
+  let acknowledge!: (value: { sent: boolean }) => void;
+  const outcomes: Promise<boolean>[] = [];
   const cleanup = install(
     {
       inspect: async () => snapshot,
-      // A sent prompt starts a new turn, so the reply no longer lists its candidates.
-      send: async () => ({ ...snapshot, candidates: [], sent: outcome === "sent" }),
-      sent: async () => {
-        hooks++;
-      },
+      send: () => new Promise((resolve) => (acknowledge = resolve)),
+      sending: (outcome) => outcomes.push(outcome),
     },
     document as unknown as Parameters<typeof install>[1],
     () => context,
@@ -166,12 +163,9 @@ test("the sent hook runs only after the send is acknowledged", async () => {
   try {
     await pause();
     document.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
-    await pause();
-    assert.equal(hooks, 0);
-    outcome = "sent";
-    document.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
-    await pause();
-    assert.equal(hooks, 1);
+    assert.equal(outcomes.length, 1);
+    acknowledge({ sent: false });
+    assert.equal(await outcomes[0], false);
   } finally {
     cleanup();
     if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
@@ -199,7 +193,7 @@ test("Edit puts the prompt in the composer, replacing the draft, without sending
       inspect: async () => snapshot,
       send: async () => {
         sends++;
-        return snapshot;
+        return { sent: true };
       },
     },
     document as unknown as Parameters<typeof install>[1],
@@ -282,8 +276,7 @@ test("a new turn's unsent block renders no note from the previous send", async (
     {
       inspect: (input) => engine.inspect(input),
       send: async (input, sendKey) => {
-        await engine.send(input, sendKey);
-        return engine.inspect(input);
+        return { sent: await engine.send(input, sendKey) };
       },
     },
     document as unknown as Parameters<typeof install>[1],
@@ -312,7 +305,7 @@ test("new completed prompt renders promptly after a previous scan", async () => 
   });
   let completed = false;
   const cleanup = install(
-    { inspect: async () => snapshot, send: async () => snapshot },
+    { inspect: async () => snapshot, send: async () => ({ sent: true }) },
     document as unknown as Parameters<typeof install>[1],
     () => (completed ? context : null),
   );
@@ -356,7 +349,7 @@ test("Send and Edit update controls in place without extra timeline reads", asyn
       },
       send: async () => {
         current = { ...snapshot, candidates: [{ ...snapshot.candidates[0], state: "sent" }] };
-        return current;
+        return { sent: true };
       },
     },
     document as unknown as Parameters<typeof install>[1],
@@ -402,7 +395,7 @@ test("streaming DOM changes reuse the last timeline read until a prompt block ch
         reads++;
         return snapshot;
       },
-      send: async () => snapshot,
+      send: async () => ({ sent: true }),
     },
     document as unknown as Parameters<typeof install>[1],
     () => context,

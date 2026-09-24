@@ -7,6 +7,7 @@ import {
 } from "@getpaseo/plugin/client/ui";
 import { Text } from "react-native";
 import { sendSettings } from "../shared/settings";
+import { backToBoard } from "./back-to-board";
 
 export function SendSettingsScreen({ theme }: PluginSurfaceProps) {
   const settings = useSettings(sendSettings);
@@ -36,6 +37,7 @@ export function SendSettingsScreen({ theme }: PluginSurfaceProps) {
     );
   }
   const { values, revision } = settings;
+  backToBoard.enabled = values.backToBoard;
   return (
     <SettingsSection title="Next prompt actions">
       <SettingsCard>

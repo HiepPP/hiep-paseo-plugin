@@ -20,6 +20,7 @@ runInNewContext(compiled, {
   exports,
   require: (id: string) => {
     if (id === "react/jsx-runtime") return require(id);
+    if (id === "./clock") return { useClock: (read: (now: number) => unknown) => read(Date.now()) };
     if (id === "react")
       return {
         ...require("react"),
