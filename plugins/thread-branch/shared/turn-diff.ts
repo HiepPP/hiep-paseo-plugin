@@ -18,6 +18,8 @@ export const turnDiffSchema = z.object({
       path: z.string(),
       added: z.number().int().nonnegative().nullable(),
       deleted: z.number().int().nonnegative().nullable(),
+      /** An untracked file too large to snapshot: listed, but with no diff. */
+      large: z.boolean().optional(),
     }),
   ),
   commits: z.array(z.object({ sha: z.string(), subject: z.string() })),

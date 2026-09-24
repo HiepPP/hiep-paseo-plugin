@@ -256,6 +256,57 @@ test("shows the start of a diff larger than the runner's buffer", async () => {
   });
 });
 
+test("keeps large untracked files out of the snapshot and lists them as large", async () => {
+  await withRepo(async (root, gitSync) => {
+    const big = Buffer.alloc(2 * 1024 * 1024, "x");
+    await writeFile(join(root, "a.txt"), `${"tracked edit ".repeat(200_000)}\n`);
+    await unlink(join(root, "gone.txt"));
+    const tracker = createTurnDiffTracker();
+    const withWorkspace = { ...agent(root), workspaceId: "w1" };
+    await tracker.started(withWorkspace, "t1");
+    await writeFile(join(root, "big.bin"), big);
+    await writeFile(join(root, "small note.txt"), "small\n");
+    await writeFile(join(root, "odd\nname*.txt"), "odd\n");
+    await writeFile(join(root, "b.txt"), "b\nmore\n");
+    await writeFile(join(root, "a.txt"), `${"tracked edit ".repeat(200_001)}\n`);
+    const row = await tracker.ended(withWorkspace, "t1");
+    const source = row?.diff.source;
+    assert.ok(row && source);
+    assert.deepEqual(
+      row.diff.files.map((file) => [file.path, file.large === true]),
+      [
+        ["a.txt", false],
+        ["b.txt", false],
+        ["big.bin", true],
+        ["odd\nname*.txt", false],
+        ["small note.txt", false],
+      ],
+    );
+    assert.throws(() => gitSync("cat-file", "-e", `${source.to}:big.bin`));
+    gitSync("cat-file", "-e", `${source.to}:small note.txt`);
+    gitSync("cat-file", "-e", `${source.to}:odd\nname*.txt`);
+    // The large tracked edit and the deletion made before the turn stay in both trees.
+    gitSync("cat-file", "-e", `${source.to}:a.txt`);
+    assert.throws(() => gitSync("cat-file", "-e", `${source.to}:gone.txt`));
+    assert.equal(gitSync("diff", "--cached", "--name-only").trim(), "");
+  });
+});
+
+test("does not list a large untracked file that existed before the turn", async () => {
+  await withRepo(async (root) => {
+    await writeFile(join(root, "big.bin"), Buffer.alloc(2 * 1024 * 1024, "x"));
+    const tracker = createTurnDiffTracker();
+    const withWorkspace = { ...agent(root), workspaceId: "w1" };
+    await tracker.started(withWorkspace, "t1");
+    await writeFile(join(root, "b.txt"), "b\nmore\n");
+    const row = await tracker.ended(withWorkspace, "t1");
+    assert.deepEqual(
+      row?.diff.files.map((file) => file.path),
+      ["b.txt"],
+    );
+  });
+});
+
 test("adds no diff source without a workspace", async () => {
   await withRepo(async (root) => {
     const tracker = createTurnDiffTracker();

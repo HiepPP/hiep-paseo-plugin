@@ -30,7 +30,7 @@ function pr(number: number, overrides: Record<string, unknown> = {}) {
 function fake(options: {
   remotes: Record<string, string>;
   prs?: Record<string, unknown[]>;
-  logs?: Record<string, string>;
+  logs?: Record<string, string | { code: number; stdout: string; stderr: string }>;
   missing?: boolean;
   delay?: number;
 }) {
@@ -50,7 +50,10 @@ function fake(options: {
     maxActive = Math.max(maxActive, active);
     await new Promise((resolve) => setTimeout(resolve, options.delay ?? 0));
     active--;
-    if (args[0] === "run") return ok(options.logs?.[args[2]] ?? "");
+    if (args[0] === "run") {
+      const log = options.logs?.[args[2]] ?? "";
+      return typeof log === "string" ? ok(log) : { ...log, enoent: false };
+    }
     return ok(JSON.stringify(options.prs?.[args[args.indexOf("--repo") + 1]] ?? []));
   };
   return {
@@ -206,6 +209,87 @@ test("offers a CI failure item after the failed log is fetched in the background
     [["gh", "run", "view", "99", "--repo", "o/r", "--log-failed"]],
   );
 });
+
+for (const stream of ["stdout", "stderr"] as const) {
+  test(`treats a running workflow as not ready (notice on ${stream})`, async () => {
+    let now = 0;
+    const lines: string[] = [];
+    const notice = "run 99 is still in progress; logs will be available when it is complete";
+    const logs: Record<string, string | { code: number; stdout: string; stderr: string }> = {
+      "99": {
+        code: 0,
+        stdout: stream === "stdout" ? notice : "",
+        stderr: stream === "stderr" ? notice : "",
+      },
+    };
+    const runner = fake({
+      remotes: { "/a": "git@github.com:o/r.git" },
+      prs: { "o/r": [failingPr()] },
+      logs,
+    });
+    const search = createPrSearch({
+      run: runner.run,
+      now: () => now,
+      log: (line) => lines.push(line),
+    });
+    const runs = () => runner.gh().filter((call) => call[1] === "run").length;
+    await search.search("", dirs("/a"));
+    await tick();
+    assert.deepEqual(
+      (await search.search("", dirs("/a"))).items.map((item) => item.title),
+      ["Change 7"],
+    );
+    assert.equal(runs(), 1);
+    now += 59_000;
+    await search.search("", dirs("/a"));
+    assert.equal(runs(), 1);
+    logs["99"] = "err 1\nerr 2";
+    now += 2_000;
+    await search.search("", dirs("/a"));
+    await tick();
+    assert.equal(runs(), 2);
+    assert.deepEqual(
+      (await search.search("", dirs("/a"))).items.map((item) => item.title),
+      ["Change 7", "CI failure: #7 build"],
+    );
+    assert.deepEqual(lines, []);
+  });
+}
+
+test("still logs a real CI log failure once and keeps it for 5 minutes", async () => {
+  let now = 0;
+  const lines: string[] = [];
+  const runner = fake({
+    remotes: { "/a": "git@github.com:o/r.git" },
+    prs: { "o/r": [failingPr()] },
+    logs: { "99": { code: 1, stdout: "", stderr: "HTTP 404: Not Found" } },
+  });
+  const search = createPrSearch({
+    run: runner.run,
+    now: () => now,
+    log: (line) => lines.push(line),
+  });
+  const runs = () => runner.gh().filter((call) => call[1] === "run").length;
+  await search.search("", dirs("/a"));
+  await tick();
+  now += 2 * 60_000;
+  await search.search("", dirs("/a"));
+  assert.equal(runs(), 1);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /gh run view 99 failed/);
+});
+
+function failingPr() {
+  return pr(7, {
+    statusCheckRollup: [
+      {
+        name: "build",
+        conclusion: "FAILURE",
+        detailsUrl: "https://github.com/o/r/actions/runs/99/job/1",
+      },
+    ],
+  });
+}
 
 test("returns no items and logs one line when gh is missing", async () => {
   let now = 0;

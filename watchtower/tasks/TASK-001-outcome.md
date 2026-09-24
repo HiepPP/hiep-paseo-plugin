@@ -2,33 +2,21 @@
 
 ## Outcome
 
-Status: DONE (code and offline checks). In-app checks: PENDING-USER.
+Status: DONE
 
-## Changed
+Changed:
+- [plugins/thread-branch/server/turn-diff.ts](plugins/thread-branch/server/turn-diff.ts): `snapshotTree` now runs `git add -u -- .`, then adds only untracked files of at most `MAX_SNAPSHOT_UNTRACKED` (1 MiB) through `--pathspec-from-file` and `--pathspec-file-nul` with `GIT_LITERAL_PATHSPECS=1`. All of this runs on the temp index. The function returns `{ tree, skipped }`. `ended` lists a skipped file that is new in the turn as `large: true`, except for a start restored from disk.
+- [plugins/thread-branch/shared/turn-diff.ts](plugins/thread-branch/shared/turn-diff.ts): an optional `large` flag on a file entry.
+- [plugins/thread-branch/client/turn-diff-card.tsx](plugins/thread-branch/client/turn-diff-card.tsx): a large file shows `large, not saved` and is not clickable.
+- [plugins/thread-branch/tests/turn-diff.test.ts](plugins/thread-branch/tests/turn-diff.test.ts): 2 new tests.
+- [plugins/thread-branch/README.md](plugins/thread-branch/README.md): one bullet.
 
-- plugins/board/server/recaps.ts (new): `parseRecap`, `recapEntry`, `localDay`, `groupRecaps`, `createRecapStore` (JSONL, mode 0600, dedupe on agentId+turnId, 90 days / 2,000 entries, serialized writes, torn-line repair).
-- plugins/board/shared/recaps.ts (new): `recapEntrySchema`, `recapsRpc` (`board.recaps`, input `{ days }` 1-30 default 7), `recapDayMarkdown`.
-- plugins/board/index.server.ts: on completed `agent.turn_ended`, parse the last `assistant_message`; detached placement lookup + append. Serves `board.recaps` with `projectId` mapped like `board.snapshot`.
-- plugins/board/client/recaps.tsx (new): `BoardViewSwitch` (Runs / Recaps) and `RecapsView` (day > project > rows, row opens thread, per-day Copy via `copyText`).
-- plugins/board/client/page.tsx: switch beside `BoardSizeControl`; Recaps view replaces the run columns when selected.
-- plugins/board/tests/recaps.test.ts (new): 14 tests.
-- plugins/board/README.md: new Recaps section; storage line updated.
+Contract:
+- Tracked files are always snapshotted. Untracked files over 1 MiB never enter `.git` through snapshots.
+- The real-index guard (`git rev-parse --git-path index` must return the temp copy) still runs before any `git add`.
+- Not shown: a large untracked file that existed before the turn and changed during it.
 
-## Contract
-
-- Entry: agentId, turnId, title, cwd, workspaceId, project, projectKey, endedAt, day (host local YYYY-MM-DD), branch, did, commitPush, raw (<= 2,000 chars). Missing fields are null.
-- Project naming matches server/store.ts: host placement (`project:<key>`), else cwd basename (`cwd:<cwd>`).
-- Store path: `$PASEO_HOME/plugin-data/board/recaps.jsonl` (default `~/.paseo`). No backfill.
-- A null turnId is never treated as a duplicate.
-- Project color uses the saved Board palette; a project not yet colored by the Runs view shows a neutral mark.
-
-## Verified
-
-- Group-level run (only TASK in group A), plugins/board: `npm run typecheck` exit 0; `S=lint; npm run $S` exit 0 (0 warnings, 0 errors); `npm test` exit 0 (73 pass, 0 fail, including 14 in tests/recaps.test.ts covering bullets, no bullets, Vietnamese, missing field, no recap, recap not last section, duplicate turnId, 90-day and 2,000-entry limits, torn line, day/project grouping, markdown copy); `npx oxfmt --check` on all 7 changed files: clean.
-- GitNexus impact: repo not indexed; used rg instead. `BoardPage` is used only by index.client.tsx; risk LOW.
-- PENDING-USER: `paseo plugin reload board`, one completed turn ending with `## Recap`, then `stat -f %Lp ~/.paseo/plugin-data/board/recaps.jsonl` -> 600 and one new line; Recaps view shows it under today and its project; row click opens the thread; Copy pastes the day's markdown; Runs view unchanged.
-
-In-app evidence 2026-09-24:
-- `recaps.jsonl` is mode 600 with 4 lines. Turns 12-14 of agent `9ad0b344` (10:35-10:37 local) each added one entry with the right day, project `.claude`, branch, did, and commit/push.
-- Recaps view, row click, and Copy: not seen by the main session. They need a user check.
-- PR #3 review fix 2026-09-24: recaps were dropped when a session reload restarted turn ids. It was reproduced live: turn 2 had id `foreground-turn-1` and its recap was lost. Dedupe now skips only a repeat of the latest entry for the agent with the same `turnId` and `raw`. Row keys use `endedAt`. Tests 74/74; the new test fails on the old code. Live recheck: both `turn one` and `turn two` recaps were saved.
+Verified:
+- `npm test` -> 54/54 pass. The test `keeps large untracked files out of the snapshot and lists them as large` fails on the old code, when stashed. It covers a 2 MiB untracked file left out of the tree and listed as large, a small file with a space, a file with a newline and `*` in its name, a 2.6 MB tracked edit still in the tree, a deletion made before the turn, and an empty `git diff --cached`.
+- The test `never stages files in the real index, even with a runner that drops env` -> still passes.
+- `npm run typecheck` -> exit 0. `S=lint; npm run $S` -> 0 warnings, 0 errors. oxfmt -> clean.

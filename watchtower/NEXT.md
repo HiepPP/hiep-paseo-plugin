@@ -2,8 +2,8 @@
 
 ## Current Active Plan
 
-- Title: Add a recap log to Board, and turn diffs and PR/CI attachments to Thread branch
-- Slug: 20260924-recap-log-turn-diff-pr-attach
+- Title: Cap untracked file size in turn snapshots, and mark CI logs that are not ready yet
+- Slug: 20260924-snapshot-size-cap-ci-log-pending
 - Status: DONE
 - Updated: 2026-09-24
 
@@ -13,28 +13,25 @@ One row per TASK. Group ties together items that write the same files.
 
 | Order | TASK | Group | Status | Spec | Deps | Context | Notes |
 |-------|------|-------|--------|------|------|---------|-------|
-| 1 | TASK-001 Recap log in Board | A | DONE | [watchtower/tasks/TASK-001-board-recap-log.md](watchtower/tasks/TASK-001-board-recap-log.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Board only. Runs in parallel with group B. |
-| 2 | TASK-002 Turn diff summary in Thread branch | B | DONE | [watchtower/tasks/TASK-002-thread-branch-turn-diff.md](watchtower/tasks/TASK-002-thread-branch-turn-diff.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Shares index files and README with TASK-003. |
-| 3 | TASK-003 GitHub PR and CI attachment in Thread branch | B | DONE | [watchtower/tasks/TASK-003-thread-branch-pr-attachment.md](watchtower/tasks/TASK-003-thread-branch-pr-attachment.md) | TASK-002 | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Same files as TASK-002, so it runs after it. |
+| 1 | TASK-001 Skip large untracked files in turn snapshots | A | DONE | [watchtower/tasks/TASK-001-snapshot-untracked-size-cap.md](watchtower/tasks/TASK-001-snapshot-untracked-size-cap.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Touches the real-index safety path. Class risky. |
+| 2 | TASK-002 Keep CI logs of running workflows as not ready | A | DONE | [watchtower/tasks/TASK-002-ci-log-not-ready.md](watchtower/tasks/TASK-002-ci-log-not-ready.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Shares the thread-branch README with TASK-001. |
 
 TASK Status labels: TODO, IN PROGRESS, BLOCKED, DONE.
 Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE, ARCHIVED after archive.
 
 ## Plan Verify
 
-- `cd plugins/board && npm run typecheck && npm test && S=lint; npm run $S` -> all pass.
 - `cd plugins/thread-branch && npm run typecheck && npm test && S=lint; npm run $S` -> all pass.
-- `git status --short -- plugins` -> no new plugin folder. Only files in [plugins/board](plugins/board) and [plugins/thread-branch](plugins/thread-branch) changed.
-- Manual, needs the Paseo app: after `paseo plugin reload board` and `paseo plugin reload thread-branch`, one agent turn that ends with `## Recap` and edits a file shows a turn diff row, and the Board Recaps view lists that recap under today and its project.
+- After `paseo plugin reload thread-branch`, `paseo plugin ls thread-branch --json` -> `running` with no error.
+- After a real agent turn in a git repository, `git diff --cached --name-only` in that repository -> the same output as before the turn. The snapshot must never stage files.
 
 ## Handoff
 
-- Next action: in the Paseo app, finish one agent turn that edits a file and ends with `## Recap`. Then check the turn diff row, the Board Recaps view, and composer + -> GitHub PR.
-- Verified on 2026-09-24: both plugins pass typecheck, tests (board 73/73, thread-branch 34/34), and lint. After reload, `paseo plugin ls` shows both `running` with no error.
-- The group B reviewer found that the shared `run()` in [plugins/thread-branch/server/git.ts](plugins/thread-branch/server/git.ts) reported a timed-out process as exit 0. The fixer changed it to return `null` and added a test.
-- Known limit: a Recaps project with no current run shows a neutral color mark.
-- Carried over from the archived plan: the manual in-app check of `paseo-thread-search` is still PENDING-USER.
-- Committed on branch `feat/recap-log-turn-diff-pr-attach` (board, thread-branch, watchtower, then the turn diff follow-ups). Not pushed.
+- Next action: commit the plan and the thread-branch changes, then open a PR. Nothing is committed yet.
+- Verified on 2026-09-24: `plugins/thread-branch` passes typecheck, tests 57/57, and lint. After reload, it is `running`. Probe agent `b6c1a9f2` got a clickable card, and nothing new was staged. A plumbing compare showed only the 8 renames of the plan archive.
+- Not verified live: the not-ready state, because no workflow run was in progress. A 2 MiB untracked file in a real turn is covered by a unit test only.
+- Still open from the archived plan: the user has not confirmed that the PR picker lists PRs in the app, or the `paseo-thread-search` check.
+- The unrelated changes in [plugins/thread-context-attach](plugins/thread-context-attach) are not part of this plan. Leave them alone.
 
 ## Archive
 
@@ -43,3 +40,4 @@ Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE,
 - [watchtower/archive/20260923-thread-janitor-and-context-attach](watchtower/archive/20260923-thread-janitor-and-context-attach)
 - [watchtower/archive/20260923-thread-attach-jev-walkback-status](watchtower/archive/20260923-thread-attach-jev-walkback-status)
 - [watchtower/archive/20260923-thread-export-qmd-search](watchtower/archive/20260923-thread-export-qmd-search)
+- [watchtower/archive/20260924-recap-log-turn-diff-pr-attach](watchtower/archive/20260924-recap-log-turn-diff-pr-attach)

@@ -11,6 +11,8 @@ export type Runner = (
 ) => Promise<Exec>;
 
 const TTL = 5 * 60_000;
+// A run that is still going has no log yet; ask again soon instead of in 5 minutes.
+const NOT_READY_TTL = 60_000;
 const GH_TIMEOUT = 15_000;
 const GH_CONCURRENCY = 3;
 const MAX_ITEMS = 20;
@@ -203,7 +205,7 @@ export function createPrSearch(
     limit(() => exec("gh", args, cwd, GH_TIMEOUT, maxBuffer));
   let repos: { at: number; value: Promise<Repo[]> } | undefined;
   const lists = new Map<string, { at: number; value: Promise<PullRequest[]> }>();
-  const logs = new Map<string, { at: number; text: string | null }>();
+  const logs = new Map<string, { at: number; text: string | null; notReady?: boolean }>();
   // Warn once per outage, not on every keystroke of the picker.
   let warned = false;
   const warn = (line: string) => {
@@ -289,12 +291,25 @@ export function createPrSearch(
   function fetchLog(repo: Repo, runId: string) {
     const key = `${repo.repo}#${runId}`;
     const cached = logs.get(key);
-    if (cached && (cached.text === "" || now() - cached.at < TTL)) return;
+    if (
+      cached &&
+      (cached.text === "" || now() - cached.at < (cached.notReady ? NOT_READY_TTL : TTL))
+    )
+      return;
     if (logs.size >= LOG_CACHE_LIMIT) logs.clear();
     // An empty text marks the fetch in flight.
     logs.set(key, { at: now(), text: "" });
     void gh(["run", "view", runId, "--repo", repo.repo, "--log-failed"], repo.cwd, LOG_BUFFER)
       .then((result) => {
+        // gh exits 0 for a running workflow and prints a short notice instead of the log.
+        if (
+          result.code === 0 &&
+          result.stdout.length < 1_000 &&
+          /still in progress/i.test(`${result.stdout}\n${result.stderr}`)
+        ) {
+          logs.set(key, { at: now(), text: null, notReady: true });
+          return;
+        }
         const text = result.code === 0 && result.stdout.trim() ? tailLog(result.stdout) : null;
         if (text === null) log(`gh run view ${runId} failed for ${repo.repo}`);
         logs.set(key, { at: now(), text });

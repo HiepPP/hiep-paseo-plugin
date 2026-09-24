@@ -189,7 +189,7 @@ function FileRow({
       </View>
       <View style={styles.counts}>
         {file.added === null ? (
-          <Text style={styles.badge}>binary</Text>
+          <Text style={styles.badge}>{file.large ? "large, not saved" : "binary"}</Text>
         ) : (
           <>
             {file.added > 0 ? <Text style={styles.add}>+{file.added}</Text> : null}
@@ -297,7 +297,7 @@ export function TurnDiffCardView({
               styles={styles}
               selected={isSelected(file.path)}
               onPress={
-                source
+                source && !file.large
                   ? () =>
                       open(
                         {
