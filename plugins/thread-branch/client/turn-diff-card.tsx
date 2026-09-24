@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import { imageType, type TurnDiff } from "../shared/turn-diff";
 import { diffMarkers } from "./diff-colors";
-import { useSelectedFile, type FileSelection } from "./turn-diff-panel";
+import { useSelectedFile, type FileSelection } from "./selection";
 
 type Open = (selection: FileSelection, workspaceId: string) => void;
 type File = TurnDiff["files"][number];
@@ -227,7 +227,7 @@ function FileRow({
   );
 }
 
-function TurnDiffCardView({
+export function TurnDiffCardView({
   agentId,
   data,
   theme,

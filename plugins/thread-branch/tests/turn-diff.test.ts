@@ -7,8 +7,10 @@ import test from "node:test";
 import {
   createTurnDiffTracker,
   parseNumstat,
+  defaultGit,
   readFileDiff,
   readFileImage,
+  snapshotTree,
 } from "../server/turn-diff";
 import { run } from "../server/git";
 import { imageType, parseUnifiedDiff, turnDiffHeader } from "../shared/turn-diff";
@@ -75,6 +77,23 @@ test("counts only what changed during the turn when the tree was already dirty",
     await writeFile(join(root, "b.txt"), "b\nc\n");
     const row = await tracker.ended(agent(root), "t1");
     assert.deepEqual(row?.diff.files, [{ path: "b.txt", added: 1, deleted: 0 }]);
+  });
+});
+
+test("lists edits inside already-dirty files and files untracked before the turn", async () => {
+  await withRepo(async (root) => {
+    await writeFile(join(root, "a.txt"), "one\ntwo\nB\nC\n");
+    await writeFile(join(root, "u.txt"), "u1\n");
+    const tracker = createTurnDiffTracker();
+    await tracker.started(agent(root), "t1");
+    // Same numstat against HEAD as before the turn, but the content changed.
+    await writeFile(join(root, "a.txt"), "one\ntwo\nB2\nC\n");
+    await writeFile(join(root, "u.txt"), "u1\nu2\n");
+    const row = await tracker.ended(agent(root), "t1");
+    assert.deepEqual(row?.diff.files, [
+      { path: "a.txt", added: 1, deleted: 1 },
+      { path: "u.txt", added: 1, deleted: 0 },
+    ]);
   });
 });
 
@@ -183,6 +202,17 @@ test("opens the diff of one file with only the turn's own changes", async () => 
     // The snapshot uses a copy of the index: staging stays as it was and new.txt stays untracked.
     assert.equal(gitSync("diff", "--cached", "--name-only").trim(), "a.txt");
     assert.match(gitSync("status", "--porcelain"), /^\?\? new\.txt$/m);
+  });
+});
+
+test("never stages files in the real index, even with a runner that drops env", async () => {
+  await withRepo(async (root, gitSync) => {
+    await writeFile(join(root, "new.txt"), "n\n");
+    await writeFile(join(root, "a.txt"), "edited\n");
+    const dropsEnv = (args: readonly string[], cwd: string) => run("git", args, cwd);
+    assert.equal(await snapshotTree(dropsEnv, root), null);
+    assert.equal((await snapshotTree(defaultGit, root)) !== null, true);
+    assert.equal(gitSync("diff", "--cached", "--name-only").trim(), "");
   });
 });
 

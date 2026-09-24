@@ -1,7 +1,8 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { installBranchPills } from "./client/pills";
 import { createTurnDiffCard } from "./client/turn-diff-card";
-import { selectFile, TurnDiffPanel } from "./client/turn-diff-panel";
+import { selectFile } from "./client/selection";
+import { TurnDiffPanel } from "./client/turn-diff-panel";
 import { prAttachments } from "./shared/pr-search";
 import {
   TURN_DIFF_KIND,
@@ -28,10 +29,21 @@ export default function contribute(client: PluginClientContext) {
       client.openPanel(TURN_DIFF_PANEL, { workspaceId, agentId: file.agentId });
     }),
   });
+  const removeCommand = client.addCommandCenterItem({
+    id: "open-turn-diffs",
+    title: "Open turn changes",
+    icon: "FileDiff",
+    context: "agent",
+    onSelect: ({ openPanel }) => {
+      selectFile(null);
+      openPanel(TURN_DIFF_PANEL);
+    },
+  });
   const removeAttachments = client.addAttachmentSource(prAttachments);
   return () => {
     removePills();
     removeRenderer();
+    removeCommand();
     removePanel();
     removeAttachments();
   };

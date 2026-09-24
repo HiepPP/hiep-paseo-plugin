@@ -1,45 +1,32 @@
 import { useRpc, type PluginAgentPanelProps } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
-import { ScrollView } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useSyncExternalStore } from "react";
-import { Image, Platform, Text, View, type TextStyle } from "react-native";
+import { useMemo, useState } from "react";
+import { Image, Platform, Pressable, Text, View, type TextStyle } from "react-native";
 import {
   fileDiffRpc,
   fileImageRpc,
+  turnHistoryRpc,
   imageType,
   parseUnifiedDiff,
   type DiffRow,
-  type FileDiffRequest,
 } from "../shared/turn-diff";
 import { ADD_BACKGROUND, diffMarkers, REMOVE_BACKGROUND } from "./diff-colors";
-
-export type FileSelection = FileDiffRequest & { agentId: string };
-
-// The panel API opens a panel by id only, so the clicked file travels through this store.
-let selection: FileSelection | null = null;
-const listeners = new Set<() => void>();
-
-export function selectFile(next: FileSelection) {
-  selection = next;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-/** The file open in the Turn diff panel, so cards can mark it. */
-export function useSelectedFile() {
-  return useSyncExternalStore(subscribe, () => selection);
-}
+import { selectFile, useSelectedFile, type FileSelection } from "./selection";
+import { TurnDiffCardView } from "./turn-diff-card";
 
 const MAX_ROWS = 2_000;
 const FONT_SIZE = 12;
 const LINE_HEIGHT = 20;
 // Web text wraps by default; code lines scroll sideways instead, as in Paseo.
 const NO_WRAP = (Platform.OS === "web" ? { whiteSpace: "pre" } : {}) as TextStyle;
+// Wrapped lines keep indentation and break long tokens such as URLs or paths.
+const WRAP = (
+  Platform.OS === "web" ? { whiteSpace: "pre-wrap", overflowWrap: "anywhere" } : {}
+) as TextStyle;
+// Long changed lines are the common case, so wrapping starts on; the choice holds for the session.
+let wrapPreference = true;
 
 /** Paseo's gutter formula: at least 2 digits, each about 0.62 of the font size, plus padding. */
 function gutterWidth(maxLine: number) {
@@ -92,7 +79,42 @@ function useStyles(theme: PluginTheme, gutter: number) {
       markerAdd: { color: markers.add },
       markerRemove: { color: markers.remove },
       code: { ...mono, paddingRight: 16, color: theme.colors.foreground, ...NO_WRAP },
+      codeWrap: {
+        ...mono,
+        flex: 1,
+        flexShrink: 1,
+        paddingRight: 12,
+        color: theme.colors.foreground,
+        ...WRAP,
+      },
+      linesWrap: { width: "100%" as const, paddingVertical: 4 },
+      spacer: { flex: 1 },
+      wrapToggle: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+      },
+      wrapToggleOn: { backgroundColor: theme.colors.surface2 },
+      wrapText: { fontSize: 12, color: theme.colors.foregroundMuted },
+      wrapTextOn: { color: theme.colors.foreground },
       muted: { color: theme.colors.foregroundMuted },
+      back: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        gap: 2,
+        paddingRight: 4,
+      },
+      backText: { color: theme.colors.accent, fontSize: 12, fontWeight: "500" as const },
+      historyContent: { padding: 12, gap: 14 },
+      historyTitle: { color: theme.colors.foreground, fontWeight: "600" as const },
+      turn: { gap: 6 },
+      turnTime: { color: theme.colors.foregroundMuted, fontSize: 12 },
+      accent: theme.colors.accent,
       images: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 12, padding: 12 },
       imageSide: { flexGrow: 1, flexBasis: 240, gap: 6 },
       imageLabel: { fontSize: 11, color: theme.colors.foregroundMuted },
@@ -109,6 +131,55 @@ function useStyles(theme: PluginTheme, gutter: number) {
 }
 
 type Styles = ReturnType<typeof useStyles>;
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Every recorded turn of this agent, read from the journal, so it survives a daemon restart. */
+function TurnHistory({
+  agentId,
+  host,
+  theme,
+  styles,
+}: {
+  agentId: string;
+  host: string;
+  theme: PluginAgentPanelProps["theme"];
+  styles: Styles;
+}) {
+  const readHistory = useRpc(turnHistoryRpc);
+  const history = useQuery({
+    queryKey: ["thread-branch-turn-history", host, agentId],
+    queryFn: () => readHistory({ agentId }),
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const turns = history.data?.turns ?? [];
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.historyContent}>
+      <Text style={styles.historyTitle}>Changes by turn</Text>
+      {history.isPending ? <Text style={styles.muted}>Loading…</Text> : null}
+      {history.error ? <Text style={styles.error}>{history.error.message}</Text> : null}
+      {history.data && turns.length === 0 ? (
+        <Text style={styles.muted}>
+          No turn changes recorded for this agent in the last 30 days.
+        </Text>
+      ) : null}
+      {turns.map((turn) => (
+        <View key={turn.key} style={styles.turn}>
+          <Text style={styles.turnTime}>{formatTime(turn.endedAt)}</Text>
+          <TurnDiffCardView agentId={agentId} data={turn.diff} theme={theme} open={selectFile} />
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
 
 function ImagePreview({
   file,
@@ -154,12 +225,13 @@ function ImagePreview({
   );
 }
 
-function DiffLine({ row, styles }: { row: DiffRow; styles: Styles }) {
+function DiffLine({ row, styles, wrap }: { row: DiffRow; styles: Styles; wrap: boolean }) {
+  const code = wrap ? styles.codeWrap : styles.code;
   if (row.type === "hunk" || row.type === "note") {
     return (
       <View style={[styles.row, row.type === "hunk" ? styles.hunk : null]}>
         <View style={styles.hunkGutter} />
-        <Text style={[styles.code, styles.muted]}>{row.text}</Text>
+        <Text style={[code, styles.muted]}>{row.text}</Text>
       </View>
     );
   }
@@ -181,13 +253,13 @@ function DiffLine({ row, styles }: { row: DiffRow; styles: Styles }) {
       >
         {marker}
       </Text>
-      <Text style={styles.code}>{row.text || " "}</Text>
+      <Text style={code}>{row.text || " "}</Text>
     </View>
   );
 }
 
 export function TurnDiffPanel({ agentId, host, theme }: PluginAgentPanelProps) {
-  const current = useSyncExternalStore(subscribe, () => selection);
+  const current = useSelectedFile();
   const file = current?.agentId === agentId ? current : null;
   const readDiff = useRpc(fileDiffRpc);
   // Snapshot trees never change, so a diff is cached for good once read.
@@ -209,13 +281,10 @@ export function TurnDiffPanel({ agentId, host, theme }: PluginAgentPanelProps) {
       )
     : 0;
   const styles = useStyles(theme, gutterWidth(maxLine));
+  const [wrap, setWrap] = useState(wrapPreference);
 
   if (!file) {
-    return (
-      <View style={styles.screen}>
-        <Text style={styles.message}>Click a file in a turn diff card to see its changes.</Text>
-      </View>
-    );
+    return <TurnHistory agentId={agentId} host={host.id} theme={theme} styles={styles} />;
   }
 
   const badge = parsed?.binary
@@ -230,6 +299,15 @@ export function TurnDiffPanel({ agentId, host, theme }: PluginAgentPanelProps) {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show all turns"
+          onPress={() => selectFile(null)}
+          style={styles.back}
+        >
+          <Icon name="ChevronLeft" size={14} color={styles.accent} />
+          <Text style={styles.backText}>All turns</Text>
+        </Pressable>
         <Text style={styles.path} numberOfLines={1}>
           {file.path}
         </Text>
@@ -239,6 +317,22 @@ export function TurnDiffPanel({ agentId, host, theme }: PluginAgentPanelProps) {
             <Text style={styles.addCount}>+{parsed.added}</Text>
             <Text style={styles.removeCount}>-{parsed.removed}</Text>
           </>
+        ) : null}
+        <View style={styles.spacer} />
+        {rows.length > 0 ? (
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: wrap }}
+            accessibilityLabel="Wrap long lines"
+            onPress={() => {
+              wrapPreference = !wrap;
+              setWrap(!wrap);
+            }}
+            style={[styles.wrapToggle, wrap ? styles.wrapToggleOn : null]}
+          >
+            <Icon name="WrapText" size={13} color={wrap ? styles.accent : styles.muted.color} />
+            <Text style={[styles.wrapText, wrap ? styles.wrapTextOn : null]}>Wrap</Text>
+          </Pressable>
         ) : null}
       </View>
       {diff.isPending ? <Text style={styles.message}>Loading…</Text> : null}
@@ -255,13 +349,21 @@ export function TurnDiffPanel({ agentId, host, theme }: PluginAgentPanelProps) {
       ) : null}
       {rows.length > 0 ? (
         <ScrollView style={styles.screen}>
-          <ScrollView horizontal>
-            <View style={styles.lines}>
+          {wrap ? (
+            <View style={styles.linesWrap}>
               {rows.slice(0, MAX_ROWS).map((row, index) => (
-                <DiffLine key={index} row={row} styles={styles} />
+                <DiffLine key={index} row={row} styles={styles} wrap />
               ))}
             </View>
-          </ScrollView>
+          ) : (
+            <ScrollView horizontal>
+              <View style={styles.lines}>
+                {rows.slice(0, MAX_ROWS).map((row, index) => (
+                  <DiffLine key={index} row={row} styles={styles} wrap={false} />
+                ))}
+              </View>
+            </ScrollView>
+          )}
           {rows.length > MAX_ROWS || diff.data?.truncated ? (
             <Text style={styles.message}>The diff is too long; only the start is shown.</Text>
           ) : null}

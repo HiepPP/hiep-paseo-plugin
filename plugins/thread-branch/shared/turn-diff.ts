@@ -36,6 +36,21 @@ export const turnDiffSchema = z.object({
 
 export type TurnDiff = z.output<typeof turnDiffSchema>;
 
+export const turnHistoryEntrySchema = z.object({
+  /** Unique per turn, also used in the git ref names that keep its snapshots. */
+  key: z.string(),
+  agentId: z.string(),
+  endedAt: z.string(),
+  diff: turnDiffSchema,
+});
+export type TurnHistoryEntry = z.output<typeof turnHistoryEntrySchema>;
+
+export const turnHistoryRpc = defineRpc({
+  name: "thread-branch.turn-history",
+  input: z.object({ agentId: z.string().min(1).max(256) }),
+  output: z.object({ turns: z.array(turnHistoryEntrySchema) }),
+});
+
 export function turnDiffHeader(data: TurnDiff) {
   const files = `${data.fileCount} ${data.fileCount === 1 ? "file" : "files"} changed`;
   const commits = data.commits.length

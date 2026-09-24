@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
   type TurnDiff,
 } from "../shared/turn-diff";
 import { run, type Exec } from "./git";
+import type { StartStore } from "./turn-starts";
 
 export type Git = (
   args: readonly string[],
@@ -17,7 +18,8 @@ export type Git = (
   env?: Readonly<Record<string, string>>,
 ) => Promise<Exec>;
 
-const defaultGit: Git = (args, cwd, env) => run("git", args, cwd, undefined, undefined, env);
+/** Passes `env` through: snapshots depend on `GIT_INDEX_FILE` to leave the real index alone. */
+export const defaultGit: Git = (args, cwd, env) => run("git", args, cwd, undefined, undefined, env);
 
 interface Counts {
   added: number | null;
@@ -86,8 +88,22 @@ export async function snapshotTree(git: Git, root: string): Promise<string | nul
   const index = path.join(dir, "index");
   try {
     // A repo without an index yet starts from an empty one.
-    await copyFile(path.resolve(root, indexPath.stdout.trim()), index).catch(() => undefined);
+    const source = path.resolve(root, indexPath.stdout.trim());
+    const copied = await copyFile(source, index).then(
+      () => true,
+      () => false,
+    );
+    if (copied) {
+      // Git re-reads files changed in the same second as the index was written ("racy git"),
+      // judged by the index file's mtime. A fresh copy mtime would hide those edits.
+      const times = await stat(source);
+      await utimes(index, times.atime, times.mtime);
+    }
     const env = { GIT_INDEX_FILE: index };
+    // `git add -A` must hit the copy. A runner that drops `env` would stage everything in the
+    // user's real index, so confirm git sees the copy before adding.
+    const seen = await git(["rev-parse", "--git-path", "index"], root, env);
+    if (seen.code !== 0 || path.resolve(root, seen.stdout.trim()) !== index) return null;
     const added = await git(["add", "-A", "--", "."], root, env);
     if (added.code !== 0) return null;
     const tree = await git(["write-tree"], root, env);
@@ -163,6 +179,18 @@ export async function diffSnapshots(start: Snapshot, end: Snapshot) {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * The exact turn diff: every file whose content differs between the start and end work-tree
+ * snapshots, including edits inside already-dirty files and files untracked before the turn.
+ */
+async function diffTrees(git: Git, root: string, from: string, to: string) {
+  const diff = await git(["diff", "--numstat", "-z", "--no-renames", from, to, "--"], root);
+  if (diff.code !== 0) throw new Error("git diff between turn snapshots failed");
+  return [...parseNumstat(diff.stdout)]
+    .map(([file, counts]) => ({ path: file, ...counts }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
 async function listCommits(git: Git, root: string, from: string, to: string) {
   const log = await git(
     ["log", `--max-count=${TURN_DIFF_MAX_COMMITS}`, "--format=%h%x09%s", `${from}..${to}`, "--"],
@@ -182,7 +210,11 @@ interface Turn {
   cwd: string;
   turnId: string | null;
   start: Promise<Snapshot | null>;
+  /** Settles once the start is on disk, so the end never races its removal. */
+  saved: Promise<unknown>;
   shared: boolean;
+  /** Rebuilt from disk: it has only the tree, so the numstat fallback would be wrong. */
+  restored?: boolean;
 }
 
 // Each side is sent to the app as base64 over the RPC socket, so keep it small.
@@ -223,13 +255,34 @@ export async function readFileImage(request: FileDiffRequest) {
   };
 }
 
+const REF_ROOT = "refs/thread-branch/turns";
+
+/** Git ref names allow neither `:` nor spaces, so keys keep only safe characters. */
+export function turnRefs(key: string) {
+  const safe = key.replace(/[^A-Za-z0-9._-]/g, "_");
+  return { from: `${REF_ROOT}/${safe}/from`, to: `${REF_ROOT}/${safe}/to` };
+}
+
+/** Refs keep the two snapshot trees from `git gc` while the journal still lists the turn. */
+export async function keepTrees(git: Git, root: string, key: string, from: string, to: string) {
+  const refs = turnRefs(key);
+  await git(["update-ref", refs.from, from], root);
+  await git(["update-ref", refs.to, to], root);
+}
+
+export async function dropTrees(git: Git, root: string, key: string) {
+  const refs = turnRefs(key);
+  await git(["update-ref", "-d", refs.from], root);
+  await git(["update-ref", "-d", refs.to], root);
+}
+
 export interface TurnAgent {
   id: string;
   cwd: string;
   workspaceId?: string | null;
 }
 
-export function createTurnDiffTracker(git: Git = defaultGit) {
+export function createTurnDiffTracker(git: Git = defaultGit, starts?: StartStore) {
   const turns = new Map<string, Turn>();
   const runningByCwd = new Map<string, Set<string>>();
 
@@ -243,6 +296,29 @@ export function createTurnDiffTracker(git: Git = defaultGit) {
     return turn;
   }
 
+  /** A start saved to disk before a plugin reload. It has only the tree, which is enough. */
+  async function restore(agent: TurnAgent, turnId: string | null): Promise<Turn | undefined> {
+    const record = await starts?.take(agent.id).catch(() => null);
+    if (!record || record.cwd !== agent.cwd) return undefined;
+    if (record.turnId && turnId && record.turnId !== turnId) return undefined;
+    const snapshot: Snapshot = {
+      root: record.root,
+      head: record.head,
+      numstat: new Map(),
+      untracked: new Set(),
+      tree: record.tree,
+    };
+    return {
+      cwd: record.cwd,
+      turnId: record.turnId,
+      start: Promise.resolve(snapshot),
+      saved: Promise.resolve(),
+      // Overlap with other agents is tracked in memory, which the reload cleared.
+      shared: false,
+      restored: true,
+    };
+  }
+
   return {
     /** Resolves once the start snapshot is taken; callers need not wait. */
     async started(agent: TurnAgent, turnId: string | null): Promise<void> {
@@ -254,10 +330,24 @@ export function createTurnDiffTracker(git: Git = defaultGit) {
         if (turn) turn.shared = true;
       }
       const start = takeSnapshot(git, agent.cwd).catch(() => null);
-      turns.set(agent.id, { cwd: agent.cwd, turnId, start, shared: running.size > 0 });
+      const saved = start
+        .then((snapshot) =>
+          snapshot?.tree && starts
+            ? starts.save(agent.id, {
+                turnId,
+                cwd: agent.cwd,
+                root: snapshot.root,
+                head: snapshot.head,
+                tree: snapshot.tree,
+                savedAt: Date.now(),
+              })
+            : undefined,
+        )
+        .catch(() => undefined);
+      turns.set(agent.id, { cwd: agent.cwd, turnId, start, saved, shared: running.size > 0 });
       running.add(agent.id);
       runningByCwd.set(agent.cwd, running);
-      await start;
+      await saved;
     },
 
     /** The row to append, or null when the turn changed no file and made no commit. */
@@ -265,13 +355,19 @@ export function createTurnDiffTracker(git: Git = defaultGit) {
       agent: TurnAgent,
       turnId: string | null,
     ): Promise<{ rowId: string; diff: TurnDiff } | null> {
-      const turn = release(agent.id);
+      const turn = release(agent.id) ?? (await restore(agent, turnId));
+      if (turn) await turn.saved;
+      await starts?.remove(agent.id).catch(() => undefined);
       if (!turn || (turn.turnId && turnId && turn.turnId !== turnId)) return null;
       const start = await turn.start;
       if (!start) return null;
       const end = await takeSnapshot(git, turn.cwd, start.head);
       if (!end || end.root !== start.root) return null;
-      const files = await diffSnapshots(start, end);
+      if (turn.restored && !end.tree) return null;
+      const files =
+        start.tree && end.tree
+          ? await diffTrees(git, end.root, start.tree, end.tree)
+          : await diffSnapshots(start, end);
       const commits =
         end.head === start.head ? [] : await listCommits(git, end.root, start.head, end.head);
       if (files.length === 0 && commits.length === 0) return null;
