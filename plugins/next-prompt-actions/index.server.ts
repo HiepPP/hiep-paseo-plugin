@@ -8,6 +8,7 @@ import { Engine } from "./server/engine";
 import { Store } from "./server/store";
 import { createDriver } from "./server/paseo";
 import { createJudge } from "./server/jev";
+import { sendSettings } from "./shared/settings";
 
 export default function contribute(server: PluginServerContext) {
   const home = process.env.PASEO_HOME || path.join(homedir(), ".paseo");
@@ -17,6 +18,7 @@ export default function contribute(server: PluginServerContext) {
   if (typeof root !== "string" || !path.isAbsolute(root))
     throw new Error("Install as next-prompt-actions.");
   let api: PaseoApi | undefined;
+  server.registerSettings(sendSettings);
   server.handle(hostRpc, () => ({ serverId }));
   const engine = new Engine(
     new Store(path.join(home, "plugin-data/next-prompt-actions/state.json")),
@@ -36,8 +38,8 @@ export default function contribute(server: PluginServerContext) {
   });
   server.handle(sendRpc, async (input, context) => {
     api = context.paseo;
-    await engine.send(input, input.key);
-    return engine.inspect(input);
+    const sent = await engine.send(input, input.key);
+    return { ...(await engine.inspect(input)), sent };
   });
   const started = server.on("agent.turn_started", ({ agent }, context) => {
     api = context.paseo;

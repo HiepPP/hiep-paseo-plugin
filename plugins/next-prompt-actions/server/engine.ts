@@ -116,7 +116,7 @@ export class Engine {
     key: string | string[],
     automatic = false,
     generation?: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const keys = typeof key === "string" ? [key] : key;
     if (this.stopped || this.locks.has(scope.agentId)) throw new Error("Send already in progress.");
     this.locks.add(scope.agentId);
@@ -167,6 +167,7 @@ export class Engine {
         );
         for (const k of keys) entry.handled[k] = "sent";
         this.note(scope.agentId, automatic ? "Jev approved; prompt sent." : "Prompt sent.", stamp);
+        return true;
       } catch {
         for (const k of keys) entry.handled[k] = "unknown";
         entry.remaining = 0;
@@ -175,8 +176,10 @@ export class Engine {
           "Send acknowledgement unknown. Check the conversation; no automatic retry.",
           stamp,
         );
+        return false;
+      } finally {
+        this.store.save();
       }
-      this.store.save();
     } finally {
       this.locks.delete(scope.agentId);
     }

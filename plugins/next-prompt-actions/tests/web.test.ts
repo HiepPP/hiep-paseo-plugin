@@ -140,6 +140,44 @@ test("multiple prompts render one card each plus Send all, and hide the raw fenc
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+test("the sent hook runs only after the send is acknowledged", async () => {
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Test UI.</span></div></div></body></html>',
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  let outcome: "sent" | "unknown" = "unknown";
+  let hooks = 0;
+  const cleanup = install(
+    {
+      inspect: async () => snapshot,
+      // A sent prompt starts a new turn, so the reply no longer lists its candidates.
+      send: async () => ({ ...snapshot, candidates: [], sent: outcome === "sent" }),
+      sent: async () => {
+        hooks++;
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => context,
+  );
+  try {
+    await pause();
+    document.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.equal(hooks, 0);
+    outcome = "sent";
+    document.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.equal(hooks, 1);
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
 test("Edit puts the prompt in the composer, replacing the draft, without sending", async () => {
   // Another conversation stays mounted with its own composer; the host marks the real field
   // with dataSet={{composerInput:""}}.

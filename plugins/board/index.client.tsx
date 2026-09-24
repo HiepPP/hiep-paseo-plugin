@@ -6,7 +6,7 @@ import { installRemoveButtons } from "./client/remove";
 import { installRemovePlacement } from "./client/web";
 import { BoardPage } from "./client/page";
 import { OrbSettingsScreen } from "./client/orb-settings";
-import { installBoardShortcut } from "./client/shortcut";
+import { installBoardOpenEvent, installBoardShortcut } from "./client/shortcut";
 
 export default function contribute(client: PluginClientContext) {
   const surface = client.addSurface("board", BoardPage);
@@ -23,6 +23,7 @@ export default function contribute(client: PluginClientContext) {
     Component: OrbSettingsScreen,
   });
   const shortcut = installBoardShortcut(() => client.openSurface("board"));
+  const openEvent = installBoardOpenEvent(() => client.openSurface("board"));
   const removePlacement = installRemovePlacement();
   const parent = installParentNavigation(client);
   const newThread = installNewThreadNavigation(client);
@@ -37,6 +38,7 @@ export default function contribute(client: PluginClientContext) {
     parent.cleanup();
     newThread.cleanup();
     shortcut();
+    openEvent();
     settings();
     sidebar();
     surface();
