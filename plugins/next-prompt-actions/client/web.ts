@@ -93,8 +93,15 @@ export function desktopSupported() {
 
 type Controller = {
   inspect(scope: Scope): Promise<Snapshot>;
-  send(scope: Scope, key: string | string[]): Promise<Snapshot>;
+  send(scope: Scope, key: string | string[]): Promise<Snapshot & { sent?: boolean }>;
+  /** Runs after a clicked send is acknowledged. */
+  sent?(): Promise<void>;
 };
+// The Board plugin listens for this event; plugin surfaces cannot open another plugin's surface.
+export function openBoard(doc: Document = document) {
+  const view = doc.defaultView;
+  if (view) doc.dispatchEvent(new view.Event("paseo-board:open"));
+}
 const OWNER = "data-next-prompt-actions";
 // Each prompt renders as its own card, so the shared fence box, raw `prompt:`/`why:` text, and its
 // copy button hide.
@@ -328,7 +335,9 @@ export function install(controller: Controller, doc: Document = document, identi
       send.addEventListener("click", () => {
         if (send.disabled || !valid(block, context, candidate)) return;
         send.textContent = "Sending...";
-        void action(() => controller.send(context, item.key), "Sending...");
+        void action(async () => {
+          if ((await controller.send(context, item.key)).sent) await controller.sent?.();
+        }, "Sending...");
       });
       sends.push(send);
       row.appendChild(send);

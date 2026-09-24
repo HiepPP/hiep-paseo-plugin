@@ -1,7 +1,10 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { settingsRpc } from "@getpaseo/plugin";
 import { Platform } from "react-native";
-import { desktopSupported, install } from "./client/web";
+import { SendSettingsScreen } from "./client/settings";
+import { desktopSupported, install, openBoard } from "./client/web";
 import { hostRpc, inspectRpc, sendRpc, toggleRpc } from "./shared/contracts";
+import { sendSettings } from "./shared/settings";
 
 export default function contribute(client: PluginClientContext) {
   if (Platform.OS !== "web" || !desktopSupported()) return () => {};
@@ -20,9 +23,22 @@ export default function contribute(client: PluginClientContext) {
   const cleanup = install({
     inspect: (scope) => client.rpc(inspectRpc, scope),
     send: (scope, key) => client.rpc(sendRpc, { ...scope, key }),
+    async sent() {
+      // The prompt is already sent; an unreadable setting only skips navigation.
+      const saved = await client.rpc(settingsRpc(sendSettings.id).read, {}).catch(() => null);
+      if (saved?.status === "ready" && sendSettings.schema.parse(saved.values).backToBoard)
+        openBoard();
+    },
+  });
+  const settings = client.addSettingsScreen({
+    id: "send",
+    title: "Next prompt actions",
+    icon: "Send",
+    Component: SendSettingsScreen,
   });
   return () => {
     cleanup();
+    settings();
     toggle();
   };
 }

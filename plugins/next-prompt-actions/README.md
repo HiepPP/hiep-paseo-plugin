@@ -16,6 +16,12 @@ It reads native Markdown markers and React ancestor props for host, workspace, m
 Unknown shapes, partial streams, incomplete history, stale messages, and wrong hosts fail closed.
 Browser and native mobile clients receive no DOM contribution.
 
+## Back to Board after send
+
+Settings → Next prompt actions → Back to Board after send. Host setting; defaults OFF.
+When ON, a manual Send or Send all opens the Board after every clicked prompt is acknowledged as sent.
+Failed or uncertain sends stay in the conversation. Requires the `board` plugin, which listens for `paseo-board:open`.
+
 ## Jev auto-run
 
 The per-conversation setting defaults OFF. Turning it ON applies only to new turns, never old suggestions.

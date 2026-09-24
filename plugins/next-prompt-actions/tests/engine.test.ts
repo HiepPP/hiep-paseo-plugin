@@ -82,7 +82,11 @@ function fixture(judge: Judge = async () => true) {
 test("manual sends preserve exact text, and concurrent requests submit once", async () => {
   const f = fixture();
   const key = (await f.engine.inspect(scope)).candidates[0].key;
-  await Promise.allSettled([f.engine.send(scope, key), f.engine.send(scope, key)]);
+  const results = await Promise.allSettled([f.engine.send(scope, key), f.engine.send(scope, key)]);
+  assert.deepEqual(
+    results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])),
+    [true],
+  );
   assert.equal(f.sent.length, 1);
   assert.equal(f.sent[0].text, "Report results.");
   await assert.rejects(f.engine.send(scope, key));
