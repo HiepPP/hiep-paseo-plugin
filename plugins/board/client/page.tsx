@@ -60,15 +60,6 @@ function relativeLabel(value: string | null, now: number): string {
   return `${durationLabel(elapsed) ?? "0s"} ago`;
 }
 
-function observedSinceLabel(value: string): string {
-  const time = Date.parse(value);
-  if (!Number.isFinite(time)) return "time unavailable";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(time));
-}
-
 function statusLabel(status: BoardRun["status"]): string {
   if (status === "unknown") return "Outcome unknown";
   return status.charAt(0).toUpperCase() + status.slice(1);
@@ -1563,8 +1554,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
               />
             </View>
             <Text style={{ color: colors.foregroundMuted, fontSize: s(12), lineHeight: s(16) }}>
-              Last 50 finished conversations, observed since{" "}
-              {observedSinceLabel(board.data!.observingSince)}
+              Last 50 finished conversations
             </Text>
           </>
         )}

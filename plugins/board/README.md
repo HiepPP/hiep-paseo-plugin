@@ -15,7 +15,7 @@ Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin su
 - Project block colors are saved in host settings by Paseo project ID. New IDs receive the pastel hue farthest from all assigned hues; existing assignments survive reloads and restarts. Unresolved projects use a neutral border until an ID is available. Removing the plugin registration deletes its settings. With many projects, colors become less distinct.
 - A star on any member puts the whole cluster above project groups, without duplicating or detaching children. The cluster returns to its root conversation's project when no member is starred. Group order follows the existing column order.
 
-- Star a card using its top-right button to put it first in either column. Stars follow conversations between columns and new turns, and are shared across connected clients. Like Board history, stars are in memory and reset on plugin reload; the existing 50-finished-card retention still applies.
+- Star a card using its top-right button to put it first in either column. Stars follow conversations between columns and new turns, are shared across connected clients, and survive plugin or daemon restarts. The 50-finished-card retention still applies.
 - Each card represents one Paseo agent conversation. New turns update the same card and move it between columns.
 - Click a card to open its conversation on the selected host. Remove is a separate action and does not navigate.
 - On desktop, the opened conversation scrolls to its latest prompt instead of the end of the reply, so you can reread the question first. Scrolling, typing, or clicking while it opens keeps Paseo's normal position. Native clients keep Paseo's default.
@@ -27,12 +27,12 @@ Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin su
 - Running cards refresh from the host every two seconds while the page is open.
 - Completion, failure, and cancellation come from actual lifecycle outcomes. Idle never implies success.
 - Missing terminal events show Outcome unknown. A later terminal event can resolve that state.
-- Keeps the latest 50 finished conversations in memory, observed since plugin startup. Reload, disable, or daemon restart clears history.
-- Runs already active when the page opens are recovered from the host. Earlier finished history is unavailable.
+- Keeps the latest 50 finished conversations and running metadata in `$PASEO_HOME/plugin-data/board/runs.json` (default `~/.paseo`) with mode `0600`. Stars and removed-card state survive plugin reload, disable, and daemon restart. When upgrading an in-memory Board, visible cards must be saved before the first reload; the old snapshot cannot recover cards already removed.
+- On the first Board read after startup, saved running cards are checked against the host. Cards still running stay active; missing cards move to Just finished with Outcome unknown unless a terminal event confirms their result. Other runs already active when Board opens are recovered from the host.
 - Start times use the daemon timestamp when available. Hook-only times and end times are observed locally.
 - A missing start time has no duration. Lifecycle delivery is best-effort; this is not an audit log.
 - Project names use the host placement when available, otherwise the working directory name.
-- Data stays on the selected host and connected client. Board stores no credentials, prompts, or transcripts; the Recaps log keeps only each reply's `## Recap` block.
+- Data stays on the selected host and connected client. The runs file contains card metadata such as title and working directory, but no credentials, prompts, or transcripts; the Recaps log keeps only each reply's `## Recap` block.
 
 ## Recaps
 

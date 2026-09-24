@@ -5,6 +5,7 @@ import { boardSize } from "./shared/board-size";
 import { orbSettings } from "./shared/orb";
 import { projectColors } from "./shared/project-colors";
 import { createRunStore } from "./server/store";
+import { createRunPersistence } from "./server/persistence";
 import { listRunning } from "./server/snapshot";
 import { boardRpc, removeRunRpc, starRunRpc } from "./shared/board";
 import { createRecapStore, parseRecap, recapEntry } from "./server/recaps";
@@ -16,47 +17,76 @@ export default function contribute(server: PluginServerContext) {
   server.registerSettings(orbSettings);
   const store = createRunStore();
   const controller = new AbortController();
-  const removeStart = server.on("agent.turn_started", ({ agent, turnId }) =>
-    store.start(agent, turnId),
-  );
+  const ensureActive = () => {
+    if (controller.signal.aborted) throw new Error("Board stopped.");
+  };
   const home = process.env.PASEO_HOME || path.join(homedir(), ".paseo");
+  const persistence = createRunPersistence(path.join(home, "plugin-data/board/runs.json"));
+  const ready = persistence.load().then((state) => {
+    if (state) store.restore(state);
+  });
+  void ready.catch((error: unknown) =>
+    console.error(`[board] could not load runs: ${String(error)}`),
+  );
+  const removeStart = server.on("agent.turn_started", async ({ agent, turnId }) => {
+    await ready;
+    ensureActive();
+    store.start(agent, turnId);
+    await persistence.save(store.exportState());
+  });
   const recaps = createRecapStore(path.join(home, "plugin-data/board/recaps.jsonl"));
   const removeEnd = server.on(
     "agent.turn_ended",
-    ({ agent, turnId, outcome, timeline }, { paseo }) => {
+    async ({ agent, turnId, outcome, timeline }, { paseo }) => {
+      await ready;
+      ensureActive();
       store.end(agent, turnId, outcome);
-      if (outcome.kind !== "completed") return;
-      const reply = timeline.findLast((item) => item.type === "assistant_message");
-      const fields = reply?.type === "assistant_message" ? parseRecap(reply.text) : null;
-      if (!fields) return;
-      const endedAt = new Date();
-      // Placement lookup and the file write run detached so the lifecycle hook returns at once.
-      void paseo.agents
-        .ref(agent.id)
-        .refresh()
-        .catch(() => null)
-        .then((current) =>
-          recaps.add(
-            recapEntry(
-              agent,
-              turnId,
-              fields,
-              endedAt,
-              current?.project ?? null,
-              current?.agent.title,
-            ),
-          ),
-        )
-        .catch((error: unknown) => console.error(`[board] could not save recap: ${String(error)}`));
+      const saved = persistence.save(store.exportState());
+      if (outcome.kind === "completed") {
+        const reply = timeline.findLast((item) => item.type === "assistant_message");
+        const fields = reply?.type === "assistant_message" ? parseRecap(reply.text) : null;
+        if (fields) {
+          const endedAt = new Date();
+          // Recap placement and its file write remain detached from the run save.
+          void paseo.agents
+            .ref(agent.id)
+            .refresh()
+            .catch(() => null)
+            .then((current) =>
+              recaps.add(
+                recapEntry(
+                  agent,
+                  turnId,
+                  fields,
+                  endedAt,
+                  current?.project ?? null,
+                  current?.agent.title,
+                ),
+              ),
+            )
+            .catch((error: unknown) =>
+              console.error(`[board] could not save recap: ${String(error)}`),
+            );
+        }
+      }
+      await saved;
     },
   );
   let pending: Promise<void> | undefined;
-  server.handle(starRunRpc, ({ id, observingSince, starred }) => ({
-    updated: store.setStarred(id, observingSince, starred),
-  }));
-  server.handle(removeRunRpc, ({ id, observingSince, endedAt }) => ({
-    removed: store.removeFinished(id, observingSince, endedAt),
-  }));
+  server.handle(starRunRpc, async ({ id, observingSince, starred }) => {
+    await ready;
+    ensureActive();
+    const updated = store.setStarred(id, observingSince, starred);
+    if (updated) await persistence.save(store.exportState());
+    return { updated };
+  });
+  server.handle(removeRunRpc, async ({ id, observingSince, endedAt }) => {
+    await ready;
+    ensureActive();
+    const removed = store.removeFinished(id, observingSince, endedAt);
+    if (removed) await persistence.save(store.exportState());
+    return { removed };
+  });
   server.handle(recapsRpc, async ({ days }, { paseo }) => {
     const [grouped, { projects }] = await Promise.all([recaps.list(days), paseo.projects.list()]);
     const ids = new Map(
@@ -70,11 +100,14 @@ export default function contribute(server: PluginServerContext) {
     };
   });
   server.handle(boardRpc, async (_, { paseo }) => {
+    await ready;
+    ensureActive();
     if (!pending) {
       const revision = store.revision;
       pending = listRunning(paseo, controller.signal)
         .then(async (agents) => {
-          if (!controller.signal.aborted) store.reconcile(agents, revision);
+          ensureActive();
+          store.reconcile(agents, revision);
           await Promise.all(
             store.unresolvedProjects().map(async ({ agentId, cwd }) => {
               // Placement enrichment must not hide the board when an agent is unavailable.
@@ -105,6 +138,8 @@ export default function contribute(server: PluginServerContext) {
         });
     }
     await pending;
+    ensureActive();
+    await persistence.save(store.exportState());
     const { projects } = await paseo.projects.list();
     const ids = new Map(
       projects.map((project) => [`project:${project.projectId}`, project.projectId]),
@@ -115,10 +150,12 @@ export default function contribute(server: PluginServerContext) {
       runs: snapshot.runs.map((run) => ({ ...run, projectId: ids.get(run.projectKey) })),
     };
   });
-  return () => {
+  return async () => {
     controller.abort();
     removeStart();
     removeEnd();
+    await ready.catch(() => undefined);
+    await persistence.flush();
     store.clear();
   };
 }

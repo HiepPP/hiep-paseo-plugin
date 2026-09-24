@@ -1,13 +1,22 @@
 import type { PluginHookAgent, PluginTurnOutcome } from "@getpaseo/plugin/server";
+import { z } from "zod";
+import { runSchema } from "../shared/board";
 import type { BoardRun } from "../shared/board";
 
-type Run = BoardRun & {
-  providerTurnId: string | null;
-  snapshotTurnId: string | null;
-  dismissed?: boolean;
-  cwd: string;
-  projectResolved: boolean;
-};
+const persistedRunSchema = runSchema.extend({
+  cwd: z.string(),
+  providerTurnId: z.string().nullable(),
+  snapshotTurnId: z.string().nullable(),
+  dismissed: z.boolean().optional(),
+  projectResolved: z.boolean(),
+});
+export const runStateSchema = z.object({
+  version: z.literal(1),
+  active: z.array(persistedRunSchema.refine((run) => run.status === "running")),
+  finished: z.array(persistedRunSchema.refine((run) => run.status !== "running")).max(50),
+});
+export type RunState = z.infer<typeof runStateSchema>;
+type Run = RunState["active"][number];
 export type ActiveAgent = PluginHookAgent & {
   project?: string;
   projectKey?: string;
@@ -68,6 +77,15 @@ export function createRunStore(now = () => new Date().toISOString()) {
   return {
     get revision() {
       return revision;
+    },
+    restore(state: RunState) {
+      active.clear();
+      finished.length = 0;
+      for (const run of state.active) active.set(run.agentId, run);
+      finished.push(...state.finished);
+    },
+    exportState(): RunState {
+      return { version: 1, active: [...active.values()], finished: [...finished] };
     },
     unresolvedProjects() {
       return [...active.values(), ...finished]
