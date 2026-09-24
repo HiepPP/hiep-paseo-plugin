@@ -37,8 +37,8 @@ export default function contribute(server: PluginServerContext) {
   );
   async function record(agentId: string, rowId: string, diff: TurnDiff) {
     const endedAt = new Date();
-    // Turn ids can repeat after a daemon restart, so the time keeps each key unique.
-    const key = `${endedAt.getTime()}-${rowId.replace(/^turn-diff:/, "")}`;
+    // The row id already carries the end time, which keeps journal keys and refs unique.
+    const key = rowId.replace(/^turn-diff:/, "");
     if (diff.source) await keepTrees(git, diff.source.root, key, diff.source.from, diff.source.to);
     const expired = await journal.add({ key, agentId, endedAt: endedAt.toISOString(), diff });
     for (const old of expired) {

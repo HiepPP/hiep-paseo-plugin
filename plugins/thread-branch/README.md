@@ -43,7 +43,8 @@ bytes, deleted at turn end, dropped after a day), so a plugin reload mid-turn st
   what changed during that turn, from the same two snapshots. Rows from before this version, or
   where a snapshot timed out, are not clickable. **All turns** in the panel, or Command Center →
   **Open turn changes**, lists every recorded turn of the agent, newest first.
-- The daemon keeps timeline cards only in memory, so a daemon restart removes them. Each card is
+- The daemon keeps timeline cards only in memory, so a daemon restart, or a reload of the agent
+  session (Refresh, `paseo agent reload`), removes them. Each card is
   also written to `$PASEO_HOME/plugin-data/thread-branch/turn-diffs.jsonl` (mode 600), and the
   panel's turn list reads that file, so turn changes stay viewable after a restart. Nothing is
   cached in memory. Entries older than 30 days, or past 2,000, are dropped.

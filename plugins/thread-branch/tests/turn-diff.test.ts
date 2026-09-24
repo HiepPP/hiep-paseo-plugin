@@ -52,7 +52,7 @@ test("lists edited, new untracked, deleted, and binary files", async () => {
     await unlink(join(root, "gone.txt"));
     const row = await tracker.ended(agent(root), "t1");
     assert.ok(row);
-    assert.equal(row.rowId, "turn-diff:t1");
+    assert.match(row.rowId, /^turn-diff:\d+-t1$/);
     assert.deepEqual(row.diff.files, [
       { path: "a.txt", added: 2, deleted: 1 },
       { path: "bin.dat", added: null, deleted: null },
@@ -213,6 +213,46 @@ test("never stages files in the real index, even with a runner that drops env", 
     assert.equal(await snapshotTree(dropsEnv, root), null);
     assert.equal((await snapshotTree(defaultGit, root)) !== null, true);
     assert.equal(gitSync("diff", "--cached", "--name-only").trim(), "");
+  });
+});
+
+test("gives a new row id to a later turn that reuses a turn id", async () => {
+  await withRepo(async (root) => {
+    const tracker = createTurnDiffTracker();
+    await tracker.started(agent(root), "foreground-turn-1");
+    await writeFile(join(root, "a.txt"), "first\n");
+    const first = await tracker.ended(agent(root), "foreground-turn-1");
+    // Paseo restarts turn ids at 1 when it reloads a session.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await tracker.started(agent(root), "foreground-turn-1");
+    await writeFile(join(root, "b.txt"), "second\n");
+    const second = await tracker.ended(agent(root), "foreground-turn-1");
+    assert.ok(first && second);
+    assert.notEqual(first.rowId, second.rowId);
+  });
+});
+
+test("shows the start of a diff larger than the runner's buffer", async () => {
+  await withRepo(async (root, gitSync) => {
+    const lines = (tag: string) =>
+      Array.from(
+        { length: 20_000 },
+        (_, i) => `"${tag}-dependency-${i}": "registry/pkg-${i}-1.0.${i}.tgz",`,
+      ).join("\n");
+    await writeFile(join(root, "package-lock.json"), `${lines("old")}\n`);
+    gitSync("add", "package-lock.json");
+    gitSync("commit", "-q", "-m", "lock");
+    const tracker = createTurnDiffTracker();
+    const withWorkspace = { ...agent(root), workspaceId: "w1" };
+    await tracker.started(withWorkspace, "t1");
+    await writeFile(join(root, "package-lock.json"), `${lines("new")}\n`);
+    const source = (await tracker.ended(withWorkspace, "t1"))?.diff.source;
+    assert.ok(source);
+    // Over the runner's 1 MiB buffer, so git is killed mid-output.
+    const result = await readFileDiff(git, { ...source, path: "package-lock.json" });
+    assert.equal(result.truncated, true);
+    assert.equal(result.diff.length, 200_000);
+    assert.match(result.diff, /^diff --git a\/package-lock\.json/);
   });
 });
 

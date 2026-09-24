@@ -130,7 +130,9 @@ export async function readFileDiff(git: Git, request: FileDiffRequest) {
     ],
     request.root,
   );
-  if (result.code !== 0) throw new Error("Could not read the diff for this file.");
+  // A diff over the runner's buffer kills git, but the output kept still starts the diff.
+  if (result.code !== 0 && result.stdout.length <= MAX_FILE_DIFF)
+    throw new Error("Could not read the diff for this file.");
   const truncated = result.stdout.length > MAX_FILE_DIFF;
   return { diff: truncated ? result.stdout.slice(0, MAX_FILE_DIFF) : result.stdout, truncated };
 }
@@ -389,7 +391,8 @@ export function createTurnDiffTracker(git: Git = defaultGit, starts?: StartStore
             }
           : {}),
       };
-      return { rowId: `turn-diff:${turnId ?? turn.turnId ?? Date.now()}`, diff };
+      // Turn ids restart at 1 when Paseo reloads a session; a reused row id would replace a row.
+      return { rowId: `turn-diff:${Date.now()}-${turnId ?? turn.turnId ?? "turn"}`, diff };
     },
   };
 }
