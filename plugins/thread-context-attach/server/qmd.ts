@@ -8,6 +8,8 @@ export const QMD_INDEX = "paseo-threads";
 export const QMD_COLLECTION = "paseo-threads";
 const UPDATE_INTERVAL_MS = 30_000;
 const TIMEOUT_MS = 120_000;
+/** The first embed downloads a ~330 MB model and embeds every thread. */
+const EMBED_TIMEOUT_MS = 600_000;
 const MAX_STDOUT = 64_000;
 const FALLBACK_BINS = ["/opt/homebrew/bin/qmd", "/usr/local/bin/qmd"];
 
@@ -27,14 +29,18 @@ export interface RunResult {
   code: number | null;
   stdout: string;
 }
-export type Runner = (args: string[], signal: AbortSignal) => Promise<RunResult>;
+export type Runner = (
+  args: string[],
+  signal: AbortSignal,
+  timeoutMs?: number,
+) => Promise<RunResult>;
 
 /** Runs `qmd --index paseo-threads <args>` without a shell, with a timeout. */
 export function createRunner(bin: string, env: NodeJS.ProcessEnv = process.env): Runner {
   // The qmd launcher runs `node` from PATH, and its native modules match the user's first
   // `node`. Keep the user's order; qmd's own folder is only a fallback.
   const PATH = [env.PATH, path.dirname(bin)].filter(Boolean).join(path.delimiter);
-  return (args, signal) =>
+  return (args, signal, timeoutMs = TIMEOUT_MS) =>
     new Promise((resolve, reject) => {
       const child = spawn(bin, ["--index", QMD_INDEX, ...args], {
         stdio: ["ignore", "pipe", "ignore"],
@@ -42,7 +48,7 @@ export function createRunner(bin: string, env: NodeJS.ProcessEnv = process.env):
       });
       let stdout = "";
       const kill = () => child.kill("SIGKILL");
-      const timer = setTimeout(kill, TIMEOUT_MS);
+      const timer = setTimeout(kill, timeoutMs);
       signal.addEventListener("abort", kill, { once: true });
       const done = () => {
         clearTimeout(timer);
@@ -70,7 +76,8 @@ export interface IndexerOptions {
 }
 
 /**
- * Adds the export folder as a collection once, then runs `update` at most once per interval.
+ * Adds the export folder as a collection once, then runs `update` and `embed` at most once per
+ * interval. `update` alone leaves new and changed threads without vectors, so `query` misses them.
  * Updates never overlap; a notify during a run schedules one more run.
  * qmd output is not logged because it can quote thread text.
  */
@@ -112,6 +119,12 @@ export function createIndexer(options: IndexerOptions) {
     try {
       const result = await options.run(["update"], controller.signal);
       options.log(`qmd update exit ${result.code} in ${Date.now() - lastRun} ms`);
+      if (result.code === 0) {
+        // With nothing pending, embed exits in about 0.3 s without loading the model.
+        const started = Date.now();
+        const embed = await options.run(["embed"], controller.signal, EMBED_TIMEOUT_MS);
+        options.log(`qmd embed exit ${embed.code} in ${Date.now() - started} ms`);
+      }
     } catch (error) {
       options.log(`qmd update failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
