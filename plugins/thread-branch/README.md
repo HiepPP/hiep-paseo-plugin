@@ -35,6 +35,8 @@ bytes, deleted at turn end, dropped after a day), so a plugin reload mid-turn st
   files whose content differs between the two trees, so edits inside files that were already
   dirty, and files that were untracked before the turn, still count. Files edited before the turn
   and not touched during it are left out. The objects stay loose until `git gc` prunes them.
+- Untracked files over 1 MiB stay out of snapshots, so they cost no space under `.git`. A new one
+  still shows on the card as **large, not saved**, with no diff. Tracked files are always kept.
 - If a snapshot times out, the card falls back to comparing `git diff --numstat` against the start
   commit. That fallback can miss an edit that keeps a dirty file's line counts equal.
 - When another agent ran a turn in the same `cwd` at the same time, the row says
@@ -72,6 +74,8 @@ the first 4,000 characters of its description to the draft. Nothing is sent unti
   in the background. A later search then also offers **CI failure: #42 build** with the last 200
   lines of that log, at most 8,000 characters. The first search after a failure never has it yet,
   because an attachment's text is built during the search and there is no hook when you pick one.
+- A workflow that is still running has no log yet. It is not logged as a failure, and its log is
+  fetched again after about a minute.
 - Without `gh`, or when it is not signed in, the picker is empty and one line is logged. The pills
   and turn diff keep working.
 

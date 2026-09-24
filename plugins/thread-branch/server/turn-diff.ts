@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
+import { copyFile, lstat, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -32,12 +32,16 @@ interface Snapshot {
   numstat: Map<string, Counts>;
   untracked: Set<string>;
   tree: string | null;
+  /** Untracked files too large to copy into the snapshot tree. */
+  skipped: Set<string>;
 }
 
 const BINARY: Counts = { added: null, deleted: null };
 // Larger new files are listed without line counts instead of being read into memory.
 const MAX_READ = 1024 * 1024;
 const MAX_UNTRACKED_READS = 200;
+// Snapshot trees are kept for 30 days, so large untracked artifacts stay out of them.
+export const MAX_SNAPSHOT_UNTRACKED = 1024 * 1024;
 
 /** Parses `git diff --numstat -z --no-renames`: `<added>\t<deleted>\t<path>\0`, `-` for binary. */
 export function parseNumstat(output: string): Map<string, Counts> {
@@ -67,21 +71,26 @@ export async function takeSnapshot(git: Git, cwd: string, base?: string): Promis
     git(["ls-files", "-z", "--others", "--exclude-standard"], root),
   ]);
   if (diff.code !== 0 || others.code !== 0) return null;
+  const snapshot = await snapshotTree(git, root).catch(() => null);
   return {
     root,
     head,
     numstat: parseNumstat(diff.stdout),
     untracked: new Set(others.stdout.split("\0").filter(Boolean)),
-    tree: await snapshotTree(git, root).catch(() => null),
+    tree: snapshot?.tree ?? null,
+    skipped: new Set(snapshot?.skipped ?? []),
   };
 }
 
 /**
- * Writes the whole work tree, untracked files included, as a git tree object. A copy of the
- * index keeps the user's staging area untouched, and its stat cache avoids rehashing
- * unchanged files. The objects stay loose until `git gc` prunes them.
+ * Writes the work tree as a git tree object: tracked changes plus untracked files up to
+ * `MAX_SNAPSHOT_UNTRACKED`. A copy of the index keeps the user's staging area untouched, and its
+ * stat cache avoids rehashing unchanged files. Larger untracked files are returned as `skipped`.
  */
-export async function snapshotTree(git: Git, root: string): Promise<string | null> {
+export async function snapshotTree(
+  git: Git,
+  root: string,
+): Promise<{ tree: string; skipped: string[] } | null> {
   const indexPath = await git(["rev-parse", "--git-path", "index"], root);
   if (indexPath.code !== 0) return null;
   const dir = await mkdtemp(path.join(tmpdir(), "thread-branch-index-"));
@@ -104,10 +113,31 @@ export async function snapshotTree(git: Git, root: string): Promise<string | nul
     // user's real index, so confirm git sees the copy before adding.
     const seen = await git(["rev-parse", "--git-path", "index"], root, env);
     if (seen.code !== 0 || path.resolve(root, seen.stdout.trim()) !== index) return null;
-    const added = await git(["add", "-A", "--", "."], root, env);
-    if (added.code !== 0) return null;
+    const tracked = await git(["add", "-u", "--", "."], root, env);
+    if (tracked.code !== 0) return null;
+    const others = await git(["ls-files", "-z", "--others", "--exclude-standard"], root, env);
+    if (others.code !== 0) return null;
+    const keep: string[] = [];
+    const skipped: string[] = [];
+    for (const file of others.stdout.split("\0").filter(Boolean)) {
+      const info = await lstat(path.join(root, file)).catch(() => null);
+      if (info?.isFile() && info.size > MAX_SNAPSHOT_UNTRACKED) skipped.push(file);
+      else keep.push(file);
+    }
+    if (keep.length > 0) {
+      const list = path.join(dir, "untracked");
+      await writeFile(list, `${keep.join("\0")}\0`);
+      // Literal pathspecs: names with `*`, `?`, or a leading `:` must not act as patterns.
+      const added = await git(
+        ["add", `--pathspec-from-file=${list}`, "--pathspec-file-nul"],
+        root,
+        { ...env, GIT_LITERAL_PATHSPECS: "1" },
+      );
+      if (added.code !== 0) return null;
+    }
     const tree = await git(["write-tree"], root, env);
-    return tree.code === 0 ? tree.stdout.trim() || null : null;
+    const id = tree.code === 0 ? tree.stdout.trim() : "";
+    return id ? { tree: id, skipped } : null;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -309,6 +339,7 @@ export function createTurnDiffTracker(git: Git = defaultGit, starts?: StartStore
       numstat: new Map(),
       untracked: new Set(),
       tree: record.tree,
+      skipped: new Set(),
     };
     return {
       cwd: record.cwd,
@@ -366,10 +397,18 @@ export function createTurnDiffTracker(git: Git = defaultGit, starts?: StartStore
       const end = await takeSnapshot(git, turn.cwd, start.head);
       if (!end || end.root !== start.root) return null;
       if (turn.restored && !end.tree) return null;
-      const files =
+      const files: TurnDiff["files"] =
         start.tree && end.tree
           ? await diffTrees(git, end.root, start.tree, end.tree)
           : await diffSnapshots(start, end);
+      if (start.tree && end.tree && !turn.restored) {
+        // A restored start has no untracked list, so it cannot tell which large files are new.
+        for (const file of end.skipped) {
+          if (!start.untracked.has(file))
+            files.push({ path: file, added: null, deleted: null, large: true });
+        }
+        files.sort((a, b) => a.path.localeCompare(b.path));
+      }
       const commits =
         end.head === start.head ? [] : await listCommits(git, end.root, start.head, end.head);
       if (files.length === 0 && commits.length === 0) return null;
