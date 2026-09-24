@@ -10,6 +10,7 @@
 - Keep provider settings intact and preserve explicit user selections.
 - Separate deterministic verification, model judgments, and live runtime evidence.
 - Keep raw prompts, credentials, and local run state outside Git.
+- Extend an existing plugin that already owns the data before adding a new plugin. The user asked for this on 2026-09-24.
 
 ## Source Anchors
 
@@ -30,3 +31,5 @@
 - 2026-09-23: Jev is a judge, not a search engine. For finding the right thread or passage, use local search such as qmd. A Jev picker label was built, rejected by the user, and reverted.
 - 2026-09-23: qmd's launcher runs the first `node` on PATH, and its `better-sqlite3` module only loads on the Node it was built for (`~/.local/bin/node` v24). When spawning qmd from the daemon, keep the user's PATH order. Putting `/opt/homebrew/bin` first picks Node v25 and qmd exits 1.
 - 2026-09-23: A plugin gets a Paseo API only inside hooks and RPCs, not at load. Start startup work such as a backfill on the first hook or RPC.
+- 2026-09-24: Node `execFile` sets `error.code` to null when a timeout kills the process. A runner that maps null to 0 reports a timeout as success. Check `killed` or `signal` first.
+- 2026-09-24: `paseo agent logs` and the MCP activity summary hide plugin timeline rows. To check a plugin row, run `createPaseoClient({ url: "ws://127.0.0.1:6767/ws" })` then `agents.ref(id).timeline.refetch({ direction: "tail" })` from a plugin folder.
