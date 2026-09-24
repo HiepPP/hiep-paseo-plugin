@@ -142,14 +142,13 @@ export function createRecapStore(file: string, now = () => new Date()) {
   }
 
   return {
-    /** Returns false for a duplicate agent turn. */
+    /** Returns false for a repeated delivery of the agent's latest turn. */
     add(entry: RecapEntry): Promise<boolean> {
       return serial(async () => {
         const list = await load();
-        if (
-          entry.turnId !== null &&
-          list.some((item) => item.agentId === entry.agentId && item.turnId === entry.turnId)
-        )
+        // Turn ids restart at 1 when Paseo reloads a session, so an id alone is not a repeat.
+        const last = list.findLast((item) => item.agentId === entry.agentId);
+        if (entry.turnId !== null && last?.turnId === entry.turnId && last.raw === entry.raw)
           return false;
         await mkdir(path.dirname(file), { recursive: true });
         const kept = prune([...list, entry]);

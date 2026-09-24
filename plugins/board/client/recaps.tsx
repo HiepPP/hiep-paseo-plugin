@@ -198,7 +198,7 @@ function RecapDaySection({
             </View>
             {project.entries.map((entry) => (
               <RecapRow
-                key={`${entry.agentId}:${entry.turnId ?? entry.endedAt}`}
+                key={`${entry.agentId}:${entry.endedAt}`}
                 entry={entry}
                 s={s}
                 theme={theme}

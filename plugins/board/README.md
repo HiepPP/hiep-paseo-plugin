@@ -38,7 +38,7 @@ Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin su
 
 - Use **Runs / Recaps** in the Board header to switch views. Runs is the board above and works as before.
 - When a turn completes, Board reads the `## Recap` section at the end of the last assistant reply: the lines up to the next `## ` heading or the end. It records `Branch:`, `Did:`, and `Commit/push:` (with or without a leading `- `) plus the raw block, cut to 2,000 characters. Failed or cancelled turns and replies without `## Recap` add nothing.
-- Entries are appended to `$PASEO_HOME/plugin-data/board/recaps.jsonl` (default `~/.paseo`) with mode `0600`. A repeated agent turn is skipped. The log keeps at most 90 days and 2,000 entries. Logging starts when the plugin is installed; older threads are not backfilled.
+- Entries are appended to `$PASEO_HOME/plugin-data/board/recaps.jsonl` (default `~/.paseo`) with mode `0600`. A repeated delivery of the same turn is skipped; a later turn that reuses a turn id after a session reload is kept. The log keeps at most 90 days and 2,000 entries. Logging starts when the plugin is installed; older threads are not backfilled.
 - Recaps shows the last 7 days, newest first. Each day lists projects, named like run cards (host placement, else the working directory name) with the project color when one is assigned, then one row per recap: thread title, did, branch, and commit/push. Click a row to open its thread.
 - **Copy** on a day puts that day on the clipboard as markdown: `## <day>`, `### <project>`, and one bullet per recap.
 - Days use the host's local time zone. The RPC `board.recaps` accepts `{ days }` from 1 to 30 (default 7).

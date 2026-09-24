@@ -127,7 +127,17 @@ test("stores entries with mode 0600 and skips a duplicate turn", async () => {
   assert.equal(lines.length, 2);
   assert.equal((await stat(file)).mode & 0o777, 0o600);
   const reopened = createRecapStore(file, () => new Date("2026-09-24T12:00:00.000Z"));
-  assert.equal(await reopened.add(entry()), false);
+  assert.equal(await reopened.add(entry({ turnId: "turn-2" })), false);
+});
+
+test("keeps a later turn that reuses a turn id after a session reload", async () => {
+  const file = await tempFile();
+  const store = createRecapStore(file, () => new Date("2026-09-24T12:00:00.000Z"));
+  assert.equal(await store.add(entry({ raw: "## Recap\n- Did: turn one" })), true);
+  // Paseo restarts turn ids at 1 when it reloads a session.
+  assert.equal(await store.add(entry({ raw: "## Recap\n- Did: turn two" })), true);
+  assert.equal(await store.add(entry({ raw: "## Recap\n- Did: turn two" })), false);
+  assert.equal((await readFile(file, "utf8")).trim().split("\n").length, 2);
 });
 
 test("repairs a torn final line before appending", async () => {
