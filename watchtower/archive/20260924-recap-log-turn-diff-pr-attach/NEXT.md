@@ -4,7 +4,7 @@
 
 - Title: Add a recap log to Board, and turn diffs and PR/CI attachments to Thread branch
 - Slug: 20260924-recap-log-turn-diff-pr-attach
-- Status: DONE
+- Status: ARCHIVED
 - Updated: 2026-09-24
 
 ## Tracker
@@ -43,3 +43,4 @@ Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE,
 - [watchtower/archive/20260923-thread-janitor-and-context-attach](watchtower/archive/20260923-thread-janitor-and-context-attach)
 - [watchtower/archive/20260923-thread-attach-jev-walkback-status](watchtower/archive/20260923-thread-attach-jev-walkback-status)
 - [watchtower/archive/20260923-thread-export-qmd-search](watchtower/archive/20260923-thread-export-qmd-search)
+- Archived: 2026-09-24 -> watchtower/archive/20260924-recap-log-turn-diff-pr-attach/

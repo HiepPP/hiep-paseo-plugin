@@ -37,3 +37,5 @@
 - 2026-09-24: The daemon rebuilds agent timelines from the provider session file. Plugin rows from `timeline.append` are not stored on disk, so a plugin that needs history must keep its own file under `plugin-data/`.
 - 2026-09-24: A snapshot through `GIT_INDEX_FILE` must fail closed. Check `git rev-parse --git-path index` returns the temp path before `git add -A`. A runner that drops `env` once staged a whole repo.
 - 2026-09-24: A session reload (`paseo agent reload`, Refresh, a stale session) rebuilds the timeline and drops every plugin row, just like a daemon restart. It also restarts turn ids at `<owner>-turn-1`, so a turn id is not unique per agent.
+- 2026-09-24: The user wants low RAM and low storage from plugin features. Prefer on-disk files read on demand over in-memory caches. Keep anything stored under `.git` or `plugin-data` bounded by size and age.
+- 2026-09-24: A local git wrapper adds decorations such as `--- Changes ---` to piped output of porcelain commands like `git diff`. For machine checks, use plumbing such as `git diff-index --cached --name-status HEAD`. Plumbing lists a rename as a D and an A.
