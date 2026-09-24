@@ -5,7 +5,7 @@ const TIMEOUT = 8_000;
 const FETCH_TIMEOUT = 30_000;
 const PR_TTL = 5 * 60_000;
 
-interface Exec {
+export interface Exec {
   code: number | null;
   stdout: string;
   stderr: string;
@@ -13,7 +13,14 @@ interface Exec {
 }
 
 // Fixed argv only; no shell, so cwd and branch names never reach an interpreter.
-function run(file: string, args: readonly string[], cwd: string, timeout = TIMEOUT): Promise<Exec> {
+export function run(
+  file: string,
+  args: readonly string[],
+  cwd: string,
+  timeout = TIMEOUT,
+  maxBuffer = 1024 * 1024,
+  extraEnv: Readonly<Record<string, string>> = {},
+): Promise<Exec> {
   return new Promise((resolve) => {
     execFile(
       file,
@@ -22,21 +29,30 @@ function run(file: string, args: readonly string[], cwd: string, timeout = TIMEO
         cwd,
         timeout,
         killSignal: "SIGKILL",
-        maxBuffer: 1024 * 1024,
+        maxBuffer,
         env: {
           ...process.env,
           GIT_TERMINAL_PROMPT: "0",
           GIT_OPTIONAL_LOCKS: "0",
           GH_PROMPT_DISABLED: "1",
           GH_NO_UPDATE_NOTIFIER: "1",
+          ...extraEnv,
         },
       },
       (error, stdout, stderr) => {
-        const code = error
-          ? ((error as NodeJS.ErrnoException & { code?: unknown }).code ?? null)
-          : 0;
+        const failed = error as
+          | (NodeJS.ErrnoException & { code?: unknown; killed?: boolean; signal?: string | null })
+          | null;
+        // A timeout kill leaves code null with partial output; it must not read as success.
+        const code = !failed
+          ? 0
+          : failed.killed || failed.signal
+            ? null
+            : typeof failed.code === "number"
+              ? failed.code
+              : null;
         resolve({
-          code: typeof code === "number" ? code : code === null ? 0 : null,
+          code,
           stdout: String(stdout ?? ""),
           stderr: String(stderr ?? ""),
           enoent: (error as NodeJS.ErrnoException | null)?.code === "ENOENT",

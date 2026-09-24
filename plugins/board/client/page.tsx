@@ -16,6 +16,7 @@ import {
 import { boardRpc, removeRunRpc, starRunRpc, groupRuns, type BoardRun } from "../shared/board";
 import { boardColumns, type RunTree } from "../shared/tree";
 import { BoardSizeControl } from "./size-control";
+import { BoardViewSwitch, RecapsView } from "./recaps";
 import { BOARD_SIZE_DEFAULT, boardScale, boardSize, clampBoardSize } from "../shared/board-size";
 import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
@@ -1108,6 +1109,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
   const sizeSettings = useSettings(boardSize);
   const orbConfig = useSettings(orbSettings);
   const orb = orbConfig.status === "ready" ? orbConfig.values : null;
+  const [view, setView] = useState<"runs" | "recaps">("runs");
   const savingSize = useRef(false);
   const failedSize = useRef<number | null>(null);
   // Latest unsaved choice; saved one write at a time so rapid clicks never reuse a stale revision.
@@ -1253,12 +1255,17 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
       {/* Outside scaled scroll content so repeated clicks keep the same target. */}
       <View
         style={{
-          alignItems: "flex-end",
+          flexDirection: "row",
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 12,
           paddingHorizontal: pagePad,
           paddingTop: 12,
           paddingBottom: 4,
         }}
       >
+        <BoardViewSwitch view={view} onChange={setView} theme={theme} />
         <BoardSizeControl size={size} onChange={changeSize} theme={theme} />
       </View>
       <ScrollView
@@ -1296,7 +1303,9 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
               Board
             </Text>
             <Text style={{ color: colors.foregroundMuted, fontSize: s(13), lineHeight: s(18) }}>
-              Running and recently finished conversations
+              {view === "recaps"
+                ? "Recaps from the last 7 days, by project"
+                : "Running and recently finished conversations"}
             </Text>
           </View>
           <View
@@ -1332,7 +1341,15 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
             </Text>
           </Pressable>
         ) : null}
-        {initialLoading ? (
+        {view === "recaps" ? (
+          <RecapsView
+            hostId={host.id}
+            theme={theme}
+            scale={scale}
+            hues={projectPalette}
+            onOpen={openAgent}
+          />
+        ) : initialLoading ? (
           <View
             style={{
               flex: 1,

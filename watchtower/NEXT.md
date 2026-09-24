@@ -2,10 +2,10 @@
 
 ## Current Active Plan
 
-- Title: Export Paseo threads to markdown and let agents search them with qmd
-- Slug: 20260923-thread-export-qmd-search
+- Title: Add a recap log to Board, and turn diffs and PR/CI attachments to Thread branch
+- Slug: 20260924-recap-log-turn-diff-pr-attach
 - Status: DONE
-- Updated: 2026-09-23
+- Updated: 2026-09-24
 
 ## Tracker
 
@@ -13,25 +13,28 @@ One row per TASK. Group ties together items that write the same files.
 
 | Order | TASK | Group | Status | Spec | Deps | Context | Notes |
 |-------|------|-------|--------|------|------|---------|-------|
-| 1 | TASK-001 Export threads to markdown | A | DONE | [watchtower/tasks/TASK-001-export-threads-markdown.md](watchtower/tasks/TASK-001-export-threads-markdown.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Hook `agent.turn_ended` plus a startup backfill. |
-| 2 | TASK-002 Keep a qmd index of exported threads | A | DONE | [watchtower/tasks/TASK-002-qmd-index.md](watchtower/tasks/TASK-002-qmd-index.md) | TASK-001 | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Shares index.server.ts with TASK-001. |
-| 3 | TASK-003 Skill that tells agents to search threads | B | DONE | [watchtower/tasks/TASK-003-thread-search-skill.md](watchtower/tasks/TASK-003-thread-search-skill.md) | TASK-002 | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Skill plus README. Links into Claude and Codex skill folders. |
+| 1 | TASK-001 Recap log in Board | A | DONE | [watchtower/tasks/TASK-001-board-recap-log.md](watchtower/tasks/TASK-001-board-recap-log.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Board only. Runs in parallel with group B. |
+| 2 | TASK-002 Turn diff summary in Thread branch | B | DONE | [watchtower/tasks/TASK-002-thread-branch-turn-diff.md](watchtower/tasks/TASK-002-thread-branch-turn-diff.md) | - | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Shares index files and README with TASK-003. |
+| 3 | TASK-003 GitHub PR and CI attachment in Thread branch | B | DONE | [watchtower/tasks/TASK-003-thread-branch-pr-attachment.md](watchtower/tasks/TASK-003-thread-branch-pr-attachment.md) | TASK-002 | [watchtower/CONTEXT.md](watchtower/CONTEXT.md) | Same files as TASK-002, so it runs after it. |
 
 TASK Status labels: TODO, IN PROGRESS, BLOCKED, DONE.
 Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE, ARCHIVED after archive.
 
 ## Plan Verify
 
-- `cd plugins/thread-context-attach && npm run typecheck && npm test && S=lint; npm run $S` -> all pass.
-- After `paseo plugin reload thread-context-attach`, the export folder holds one `.md` file per non-archived thread.
-- `qmd --index paseo-threads search "watchtower sidebar" -n 3` -> the top results include the thread `241e4fc4-e2c5-4c6b-9ca6-6fe83b34b984`.
-- Manual, needs the Paseo app: after any thread finishes a turn, its file changes within a few seconds, and a search finds the new text within about 1 minute.
+- `cd plugins/board && npm run typecheck && npm test && S=lint; npm run $S` -> all pass.
+- `cd plugins/thread-branch && npm run typecheck && npm test && S=lint; npm run $S` -> all pass.
+- `git status --short -- plugins` -> no new plugin folder. Only files in [plugins/board](plugins/board) and [plugins/thread-branch](plugins/thread-branch) changed.
+- Manual, needs the Paseo app: after `paseo plugin reload board` and `paseo plugin reload thread-branch`, one agent turn that ends with `## Recap` and edits a file shows a turn diff row, and the Board Recaps view lists that recap under today and its project.
 
 ## Handoff
 
-- Next action: the user asks a new agent in the Paseo app to find what other threads decided about the watchtower sidebar. The agent should use `paseo-thread-search` and cite thread `241e4fc4`.
-- Verified live: a real turn end rewrote thread `8dca13d1` at 18:23:14, the index updated at 18:23:37, and words from that turn found the thread.
-- Not committed. The two skill symlinks outside the repo are already in place.
+- Next action: in the Paseo app, finish one agent turn that edits a file and ends with `## Recap`. Then check the turn diff row, the Board Recaps view, and composer + -> GitHub PR.
+- Verified on 2026-09-24: both plugins pass typecheck, tests (board 73/73, thread-branch 34/34), and lint. After reload, `paseo plugin ls` shows both `running` with no error.
+- The group B reviewer found that the shared `run()` in [plugins/thread-branch/server/git.ts](plugins/thread-branch/server/git.ts) reported a timed-out process as exit 0. The fixer changed it to return `null` and added a test.
+- Known limit: a Recaps project with no current run shows a neutral color mark.
+- Carried over from the archived plan: the manual in-app check of `paseo-thread-search` is still PENDING-USER.
+- Committed on branch `feat/recap-log-turn-diff-pr-attach` (board, thread-branch, watchtower, then the turn diff follow-ups). Not pushed.
 
 ## Archive
 
@@ -39,3 +42,4 @@ Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE,
 - [watchtower/archive/20260920-arc-style-project-spaces](watchtower/archive/20260920-arc-style-project-spaces)
 - [watchtower/archive/20260923-thread-janitor-and-context-attach](watchtower/archive/20260923-thread-janitor-and-context-attach)
 - [watchtower/archive/20260923-thread-attach-jev-walkback-status](watchtower/archive/20260923-thread-attach-jev-walkback-status)
+- [watchtower/archive/20260923-thread-export-qmd-search](watchtower/archive/20260923-thread-export-qmd-search)
