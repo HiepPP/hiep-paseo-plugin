@@ -20,6 +20,7 @@ import { BOARD_SIZE_DEFAULT, boardScale, boardSize, clampBoardSize } from "../sh
 import { allocateColors, projectColors } from "../shared/project-colors";
 import { boardConnectionState } from "./connection";
 import { openNewWorkspaceForProject } from "./web";
+import { revealLatestPromptOnWeb } from "./latest-prompt";
 import { AgentAvatar } from "./avatar";
 import { Orb, OrbAvatar, orbSupported } from "./orb";
 import { orbSettings, type OrbSettings } from "../shared/orb";
@@ -1193,6 +1194,12 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
       });
     if (!opened) setProjectError("Starting a conversation from the Board needs the desktop app.");
   };
+  const openAgent = navigation
+    ? (agentId: string) => {
+        navigation.openAgent({ agentId });
+        revealLatestPromptOnWeb();
+      }
+    : undefined;
   const onRemove = async (id: string) => {
     const run = runs.find((item) => item.id === id);
     if (!run) return;
@@ -1478,7 +1485,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 now={now}
                 emptyMessage="No conversations are running."
                 theme={theme}
-                onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+                onOpen={openAgent}
                 onOpenProject={onOpenProject}
               />
               {layout.compact ? null : (
@@ -1501,7 +1508,7 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 now={now}
                 emptyMessage="No finished conversations observed yet."
                 theme={theme}
-                onOpen={navigation ? (agentId) => navigation.openAgent({ agentId }) : undefined}
+                onOpen={openAgent}
                 onOpenProject={onOpenProject}
                 onRemove={onRemove}
               />
