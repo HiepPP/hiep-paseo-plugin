@@ -38,8 +38,7 @@ export default function contribute(server: PluginServerContext) {
   });
   server.handle(sendRpc, async (input, context) => {
     api = context.paseo;
-    const sent = await engine.send(input, input.key);
-    return { ...(await engine.inspect(input)), sent };
+    return { sent: await engine.send(input, input.key) };
   });
   const started = server.on("agent.turn_started", ({ agent }, context) => {
     api = context.paseo;

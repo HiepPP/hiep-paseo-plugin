@@ -23,12 +23,6 @@ interface ShortcutTarget {
 }
 declare const window: ShortcutTarget;
 declare const navigator: { userAgent: string };
-declare const document:
-  | {
-      addEventListener(type: string, listener: () => void): void;
-      removeEventListener(type: string, listener: () => void): void;
-    }
-  | undefined;
 
 export function bindBoardShortcut(target: ShortcutTarget, open: () => void) {
   const listener = (event: ShortcutEvent) => {
@@ -59,12 +53,4 @@ export function installBoardShortcut(open: () => void) {
   )
     return () => {};
   return bindBoardShortcut(window, open);
-}
-
-// Other plugins cannot open this plugin's surface; next-prompt-actions dispatches this event.
-export function installBoardOpenEvent(open: () => void) {
-  if (typeof document === "undefined") return () => {};
-  const listener = () => open();
-  document.addEventListener("paseo-board:open", listener);
-  return () => document?.removeEventListener("paseo-board:open", listener);
 }

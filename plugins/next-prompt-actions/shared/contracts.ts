@@ -37,8 +37,9 @@ export const inspectRpc = defineRpc({
 export const sendRpc = defineRpc({
   name: "prompts.send",
   input: scopeSchema.extend({ key: z.union([z.string(), z.array(z.string()).min(1)]) }),
-  // The sent turn replaces the prompt's message as the latest one, so its candidates are gone.
-  output: snapshotSchema.extend({ sent: z.boolean() }),
+  // Only the outcome: the client rereads state after every action, and skipping that read here
+  // lets a sent prompt return to the Board one timeline read sooner.
+  output: z.object({ sent: z.boolean() }),
 });
 export const toggleRpc = defineRpc({
   name: "prompts.toggle",

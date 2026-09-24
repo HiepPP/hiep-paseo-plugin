@@ -1,8 +1,8 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
-import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, useToast } from "@getpaseo/plugin/client/react-native";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -25,6 +25,9 @@ import { revealLatestPromptOnWeb } from "./latest-prompt";
 import { AgentAvatar } from "./avatar";
 import { Orb, OrbAvatar, orbSupported } from "./orb";
 import { orbSettings, type OrbSettings } from "../shared/orb";
+import { lastSettings } from "./warm";
+import { subscribeSendResult } from "./events";
+import { useClock } from "./clock";
 
 const SECOND = 1_000;
 // Shape lock: cards 12, controls and chips 8.
@@ -203,9 +206,24 @@ function Chip({
   );
 }
 
+// Constant for the session; reading it per card render was wasted work.
+const HOVER_ACTIONS =
+  Platform.OS === "web" &&
+  (globalThis as { matchMedia?: (query: string) => { matches: boolean } }).matchMedia?.(
+    "(hover: hover) and (pointer: fine)",
+  ).matches === true;
+
+/** Keeps callback identity stable across renders while always calling the latest closure. */
+function useStableCallback<Args extends unknown[], Result>(
+  callback: (...args: Args) => Result,
+): (...args: Args) => Result {
+  const latest = useRef(callback);
+  latest.current = callback;
+  return useCallback((...args: Args) => latest.current(...args), []);
+}
+
 function RunCard({
   run,
-  now,
   theme,
   onRemove,
   onOpen,
@@ -229,7 +247,6 @@ function RunCard({
   removeCount?: number;
   scale: number;
   run: BoardRun;
-  now: number;
   theme: PluginSurfaceProps["theme"];
   onRemove?: (id: string) => Promise<void>;
   onOpen?: (agentId: string) => void;
@@ -248,7 +265,7 @@ function RunCard({
   const running = run.status === "running";
   // Web shows running work as a thinking orb; native keeps the avatar and host spinner.
   const thinking = orbSupported && orb?.enabled && running && !run.needsInput ? orb : null;
-  const duration = runDuration(run, now);
+  const duration = useClock((now) => runDuration(run, now));
   const tone = run.needsInput
     ? colors.statusWarning
     : running
@@ -258,7 +275,7 @@ function RunCard({
         : run.status === "completed"
           ? colors.statusSuccess
           : colors.statusWarning;
-  const relative = relativeLabel(run.endedAt, now);
+  const relative = useClock((now) => relativeLabel(run.endedAt, now));
   const timing = running
     ? (duration ?? "Timing unavailable")
     : run.status === "unknown"
@@ -276,11 +293,7 @@ function RunCard({
   const padX = s(subagent ? 8 : 16);
   const padY = s(subagent ? 8 : 14);
   const showStar = run.starred || hovered || starHovered || starring;
-  const hoverActions =
-    Platform.OS === "web" &&
-    (globalThis as { matchMedia?: (query: string) => { matches: boolean } }).matchMedia?.(
-      "(hover: hover) and (pointer: fine)",
-    ).matches === true;
+  const hoverActions = HOVER_ACTIONS;
   const actionsVisible =
     !hoverActions ||
     showStar ||
@@ -877,7 +890,8 @@ function RunCluster({ tree, compact, collapsed, onToggle, depth = 0, ...card }: 
   );
 }
 
-function RunColumn({
+// Memoized: the Board rerenders on every poll, but columns change only when their runs do.
+const RunColumn = memo(function RunColumn({
   orb,
   projectPalette,
   title,
@@ -885,7 +899,6 @@ function RunColumn({
   compact,
   collapsed,
   onToggle,
-  now,
   emptyMessage,
   theme,
   onRemove,
@@ -902,7 +915,6 @@ function RunColumn({
   compact: boolean;
   collapsed: ReadonlySet<string>;
   onToggle: (id: string) => void;
-  now: number;
   emptyMessage: string;
   theme: PluginSurfaceProps["theme"];
   onRemove?: (id: string) => Promise<void>;
@@ -924,7 +936,6 @@ function RunColumn({
       collapsed={collapsed}
       onToggle={onToggle}
       scale={scale}
-      now={now}
       theme={theme}
       onRemove={onRemove}
       onOpen={onOpen}
@@ -1100,7 +1111,10 @@ function RunColumn({
       )}
     </View>
   );
-}
+});
+
+const NO_RUNS: BoardRun[] = [];
+const NO_HUES: Record<string, number> = {};
 
 export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProps) {
   const palette = useSettings(projectColors);
@@ -1108,13 +1122,16 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
   // Host settings keep the size across plugin reloads and restarts without changing host appearance.
   const sizeSettings = useSettings(boardSize);
   const orbConfig = useSettings(orbSettings);
-  const orb = orbConfig.status === "ready" ? orbConfig.values : null;
+  if (orbConfig.status === "ready") lastSettings.orb = orbConfig.values;
+  const orb = orbConfig.status === "ready" ? orbConfig.values : (lastSettings.orb ?? null);
   const [view, setView] = useState<"runs" | "recaps">("runs");
   const savingSize = useRef(false);
   const failedSize = useRef<number | null>(null);
   // Latest unsaved choice; saved one write at a time so rapid clicks never reuse a stale revision.
   const [pendingSize, setPendingSize] = useState<number | null>(null);
-  const storedSize = sizeSettings.status === "ready" ? sizeSettings.values.size : null;
+  if (sizeSettings.status === "ready") lastSettings.size = sizeSettings.values.size;
+  const storedSize =
+    sizeSettings.status === "ready" ? sizeSettings.values.size : (lastSettings.size ?? null);
   const size = pendingSize ?? storedSize ?? BOARD_SIZE_DEFAULT;
   const scale = boardScale(size);
   const changeSize = (value: number) => {
@@ -1146,18 +1163,29 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
     retry: false,
     refetchInterval: 2_000,
     refetchOnWindowFocus: false,
+    // Opening a thread pops the Board off the host stack, so every return mounts it anew.
+    // Keeping the last snapshot paints it at once instead of "Loading runs…".
+    gcTime: Infinity,
   });
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), SECOND);
-    return () => clearInterval(timer);
-  }, []);
-  const onStar = async (id: string, starred: boolean) => {
+  const toast = useToast();
+  const { refetch } = board;
+  useEffect(
+    () =>
+      subscribeSendResult((sent) => {
+        void refetch();
+        if (!sent)
+          toast.show("The prompt may not have been sent. Check the conversation.", {
+            variant: "warning",
+          });
+      }),
+    [refetch, toast],
+  );
+  const onStar = useStableCallback(async (id: string, starred: boolean) => {
     const result = await setStarred({ id, starred, observingSince: board.data!.observingSince });
     if (!result.updated) throw new Error("Run changed. Refresh and retry.");
     await board.refetch({ throwOnError: true });
-  };
-  const runs = board.data?.runs ?? [];
+  });
+  const runs = board.data?.runs ?? NO_RUNS;
   useEffect(() => {
     if (palette.status !== "ready" || palette.saving || palette.saveError || savingPalette.current)
       return;
@@ -1171,20 +1199,25 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
       savingPalette.current = false;
     });
   }, [palette, board.dataUpdatedAt]);
-  const projectPalette = palette.status === "ready" ? palette.values.hues : {};
+  if (palette.status === "ready") lastSettings.hues = palette.values.hues;
+  const projectPalette =
+    palette.status === "ready" ? palette.values.hues : (lastSettings.hues ?? NO_HUES);
 
   const { running, finished } = useMemo(() => boardColumns(runs), [runs]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  const onToggle = (id: string) =>
-    setCollapsed((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const onToggle = useCallback(
+    (id: string) =>
+      setCollapsed((previous) => {
+        const next = new Set(previous);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
   // Same flow as the sidebar project "+" button: the New workspace screen with this project selected.
   const [projectError, setProjectError] = useState<string | null>(null);
-  const onOpenProject = (run: BoardRun) => {
+  const onOpenProject = useStableCallback((run: BoardRun) => {
     setProjectError(null);
     const opened =
       run.cwd !== undefined &&
@@ -1195,14 +1228,13 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
         projectId: run.projectId,
       });
     if (!opened) setProjectError("Starting a conversation from the Board needs the desktop app.");
-  };
-  const openAgent = navigation
-    ? (agentId: string) => {
-        navigation.openAgent({ agentId });
-        revealLatestPromptOnWeb();
-      }
-    : undefined;
-  const onRemove = async (id: string) => {
+  });
+  const openAgentStable = useStableCallback((agentId: string) => {
+    navigation?.openAgent({ agentId });
+    revealLatestPromptOnWeb();
+  });
+  const openAgent = navigation ? openAgentStable : undefined;
+  const onRemove = useStableCallback(async (id: string) => {
     const run = runs.find((item) => item.id === id);
     if (!run) return;
     const result = await removeRun({
@@ -1212,16 +1244,18 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
     });
     if (!result.removed) throw new Error("Run changed. Refresh and retry.");
     await board.refetch({ throwOnError: true });
-  };
+  });
   const s = (value: number) => value * scale;
   const colors = theme.colors;
-  const connection = boardConnectionState({
-    hasData: Boolean(board.data),
-    isError: board.isError,
-    isPaused: board.isPaused,
-    dataUpdatedAt: board.dataUpdatedAt,
-    now,
-  });
+  const connection = useClock((now) =>
+    boardConnectionState({
+      hasData: Boolean(board.data),
+      isError: board.isError,
+      isPaused: board.isPaused,
+      dataUpdatedAt: board.dataUpdatedAt,
+      now,
+    }),
+  );
   const initialLoading = connection === "connecting";
   const unavailable = !board.data && (connection === "error" || connection === "offline");
   const connectionColor =
@@ -1499,7 +1533,6 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 onToggle={onToggle}
                 onRemove={onRemove}
                 onStar={onStar}
-                now={now}
                 emptyMessage="No conversations are running."
                 theme={theme}
                 onOpen={openAgent}
@@ -1522,7 +1555,6 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
                 collapsed={collapsed}
                 onToggle={onToggle}
                 onStar={onStar}
-                now={now}
                 emptyMessage="No finished conversations observed yet."
                 theme={theme}
                 onOpen={openAgent}
