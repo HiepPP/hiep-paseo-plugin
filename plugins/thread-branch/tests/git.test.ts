@@ -5,6 +5,7 @@ import {
   parseAheadBehind,
   parsePullRequest,
   parseRemoteUrl,
+  run,
 } from "../server/git";
 
 test("parses rev-list left-right counts as behind/ahead", () => {
@@ -83,4 +84,10 @@ test("fetch updates the behind count without committing, merging, or pushing", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a command killed by its timeout is not reported as success", async () => {
+  const result = await run("sh", ["-c", "echo partial; sleep 5"], "/tmp", 300);
+  assert.notEqual(result.code, 0);
+  assert.equal(result.stdout, "partial\n");
 });

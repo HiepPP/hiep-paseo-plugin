@@ -20,6 +20,46 @@ The branch pill menu offers **Copy branch name**, **Fetch** (runs `git fetch`, s
 has an upstream), and **Refresh**.
 A detached HEAD shows `@<short sha>`. Non-git directories show no pill.
 
+## Turn diff
+
+After each agent turn that changed files or made commits, the thread gets one row:
+`2 files changed +14 -3`, then the commits made during the turn (at most 10), then up to 20
+files with their `+added -deleted` lines and `and N more`. Binary files show `binary`. A turn
+with no change, in a non-git folder, or without a start snapshot (for example after a plugin
+reload mid-turn) adds no row.
+
+- At turn start the plugin records `HEAD`, `git diff --numstat HEAD`, and the untracked files of
+  the repository. At turn end it diffs the work tree against the start commit, so committed and
+  uncommitted changes count once. Files already dirty at turn start count only what changed since.
+- New untracked files count their lines; files over 1 MiB show no counts.
+- When another agent ran a turn in the same `cwd` at the same time, the row says
+  **May include changes from another agent**, because git cannot tell whose edit is whose.
+- Click a file to open the **Turn diff** panel beside the agent. It shows only that file, and only
+  what changed during that turn. At turn start and end the plugin writes the whole work tree,
+  untracked files included, as a git tree object through a copy of the index, so your staging
+  area is untouched. The objects stay loose until `git gc` prunes them. Rows from before this
+  version, or where a snapshot timed out, are not clickable.
+- Images (`png`, `jpg`, `gif`, `webp`, `bmp`, `ico`, `avif`, `svg`) show a Before and After
+  preview read from the same snapshots. An image over 3 MB is not previewed.
+
+## Attach a PR
+
+Composer **+** → **GitHub PR** lists open pull requests from the GitHub repositories of all
+non-archived Paseo workspaces, newest first, at most 20. Search matches the repository, `#number`,
+title, and branch. The picker cannot tell which thread it belongs to, so it always searches every
+workspace. Picking a PR adds its repository, number, title, branch, author, URL, check summary, and
+the first 4,000 characters of its description to the draft. Nothing is sent until you send it.
+
+- Repositories come from each workspace's `origin` remote; non-GitHub remotes are skipped.
+- `gh pr list` runs per repository, at most 3 `gh` calls at once, 15 seconds each. The repository
+  list and each PR list are cached for 5 minutes, so a new PR can take up to 5 minutes to appear.
+- When a PR has a failed GitHub Actions check, the search starts `gh run view <run> --log-failed`
+  in the background. A later search then also offers **CI failure: #42 build** with the last 200
+  lines of that log, at most 8,000 characters. The first search after a failure never has it yet,
+  because an attachment's text is built during the search and there is no hook when you pick one.
+- Without `gh`, or when it is not signed in, the picker is empty and one line is logged. The pills
+  and turn diff keep working.
+
 ## How it works
 
 - `index.server.ts` runs `git` with fixed arguments in the agent's `cwd` and `gh pr view <branch>`
