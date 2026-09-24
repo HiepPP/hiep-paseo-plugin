@@ -23,11 +23,13 @@ Always pass `--index paseo-threads`.
 
    Each hit prints `qmd://paseo-threads/<agentId>.md:<line>`, the thread title, a score, and a short snippet.
 
-2. If the keywords miss, retry with synonyms or other names for the same thing. Then try the slower hybrid search, which takes 2 to 30 seconds:
+2. If the keywords miss, retry with synonyms or other names for the same thing. Then try the hybrid search with a short question. It usually takes 1 to 3 seconds:
 
    ```bash
-   qmd --index paseo-threads query "why does the git pill disappear" -n 5
+   qmd --index paseo-threads query "why does the git pill disappear" --no-rerank -n 5
    ```
+
+   Keep `--no-rerank`: reranking made queries take 30 to 40 seconds at the median and put the right thread first at most once more in 22 test questions. `query` always returns hits, even when nothing matches, so check each snippet before you use it. The right thread is often second or third.
 
 3. Read only the part you need, starting a little above the hit line:
 
@@ -48,5 +50,5 @@ Do not read a whole thread file. A long thread can be 10,000 tokens or more.
 - Cite what you use as `thread <first 8 chars of agentId>, Turn N`.
 - Results can include the current conversation. Skip hits that repeat what you already know from this thread.
 - A thread reply is what an agent said, not proof. Check important claims against code, git, or tests.
-- If there is no hit after 3 different keyword sets and one `query`, say that nothing was found. Do not guess.
+- If 3 different keyword sets miss and no `query` snippet is about the topic, say that nothing was found. Do not guess.
 - If `qmd` reports no collection or no files, the plugin is not installed or has not run yet. Say so.

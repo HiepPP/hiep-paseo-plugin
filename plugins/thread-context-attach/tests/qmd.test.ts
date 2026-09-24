@@ -9,7 +9,7 @@ const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const tempDir = async () => path.join(await mkdtemp(path.join(tmpdir(), "tca-qmd-")), "threads");
 
 /** A fake qmd that records calls; `list` stdout decides whether the collection exists. */
-function fakeRun(list: string, updateMs = 0) {
+function fakeRun(list: string, updateMs = 0, updateCode = 0) {
   const calls: string[] = [];
   let running = 0;
   let peak = 0;
@@ -21,7 +21,7 @@ function fakeRun(list: string, updateMs = 0) {
       await tick(updateMs);
       running--;
     }
-    return { code: 0, stdout: args[1] === "list" ? list : "" };
+    return { code: args[0] === "update" ? updateCode : 0, stdout: args[1] === "list" ? list : "" };
   };
   return { run, calls, peak: () => peak };
 }
@@ -73,7 +73,7 @@ test("updates run at most once per interval and never overlap", async () => {
   await tick(150);
   assert.equal(fake.calls.filter((call) => call === "update").length, 2);
   assert.equal(fake.peak(), 1);
-  assert.ok(lines.every((line) => /^qmd update exit 0 in \d+ ms$/.test(line)));
+  assert.ok(lines.every((line) => /^qmd (update|embed) exit 0 in \d+ ms$/.test(line)));
   indexer.stop();
 });
 
@@ -102,4 +102,34 @@ test("a failing qmd is logged, and stop cancels a pending update", async () => {
   stopped.stop();
   await tick(40);
   assert.deepEqual(fake.calls, []);
+});
+
+test("embed runs after a successful update and is skipped after a failed one", async () => {
+  const ok = fakeRun("qmd://paseo-threads/");
+  const indexer = createIndexer({
+    dir: await tempDir(),
+    run: ok.run,
+    log: () => {},
+    intervalMs: 0,
+  });
+  await indexer.start();
+  indexer.notify();
+  await tick(20);
+  assert.deepEqual(ok.calls.slice(1), ["update", "embed"]);
+  indexer.stop();
+
+  const failed = fakeRun("qmd://paseo-threads/", 0, 1);
+  const lines: string[] = [];
+  const failing = createIndexer({
+    dir: await tempDir(),
+    run: failed.run,
+    log: (line) => lines.push(line),
+    intervalMs: 0,
+  });
+  await failing.start();
+  failing.notify();
+  await tick(20);
+  assert.deepEqual(failed.calls.slice(1), ["update"]);
+  assert.match(lines[0], /^qmd update exit 1 in \d+ ms$/);
+  failing.stop();
 });
