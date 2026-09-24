@@ -34,7 +34,7 @@ Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE,
 - The group B reviewer found that the shared `run()` in [plugins/thread-branch/server/git.ts](plugins/thread-branch/server/git.ts) reported a timed-out process as exit 0. The fixer changed it to return `null` and added a test.
 - Known limit: a Recaps project with no current run shows a neutral color mark.
 - Carried over from the archived plan: the manual in-app check of `paseo-thread-search` is still PENDING-USER.
-- Committed on branch `feat/recap-log-turn-diff-pr-attach` in 3 commits (board, thread-branch, watchtower). Not pushed.
+- Committed on branch `feat/recap-log-turn-diff-pr-attach` (board, thread-branch, watchtower, then the turn diff follow-ups). Not pushed.
 
 ## Archive
 

@@ -33,3 +33,6 @@
 - 2026-09-23: A plugin gets a Paseo API only inside hooks and RPCs, not at load. Start startup work such as a backfill on the first hook or RPC.
 - 2026-09-24: Node `execFile` sets `error.code` to null when a timeout kills the process. A runner that maps null to 0 reports a timeout as success. Check `killed` or `signal` first.
 - 2026-09-24: `paseo agent logs` and the MCP activity summary hide plugin timeline rows. To check a plugin row, run `createPaseoClient({ url: "ws://127.0.0.1:6767/ws" })` then `agents.ref(id).timeline.refetch({ direction: "tail" })` from a plugin folder.
+- 2026-09-24: When snapshotting through a copy of the git index, copy the index mtime too (`utimes`). A fresh mtime disables git's racy-clean check, so a same-size rewrite in the same second is missed.
+- 2026-09-24: The daemon rebuilds agent timelines from the provider session file. Plugin rows from `timeline.append` are not stored on disk, so a plugin that needs history must keep its own file under `plugin-data/`.
+- 2026-09-24: A snapshot through `GIT_INDEX_FILE` must fail closed. Check `git rev-parse --git-path index` returns the temp path before `git add -A`. A runner that drops `env` once staged a whole repo.
