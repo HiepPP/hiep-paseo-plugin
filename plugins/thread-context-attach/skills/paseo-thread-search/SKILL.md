@@ -23,7 +23,9 @@ Always pass `--index paseo-threads`.
 
    Each hit prints `qmd://paseo-threads/<agentId>.md:<line>`, the thread title, a score, and a short snippet.
 
-2. If the keywords miss, retry with synonyms or other names for the same thing. Then try the hybrid search with a short question. It usually takes 1 to 3 seconds:
+   Replace every `.` with a space. One keyword with a dot, such as `agents.list` or `0.9.1`, makes the whole search return nothing; `agents list` and `0 9 1` work. Hyphens are fine.
+
+2. If the keywords miss, retry with synonyms or other names for the same thing. Threads are often in Vietnamese, so also retry in the other language: `Jev phân loại` finds a thread that `Jev classifier` misses. Vietnamese diacritics are optional (`phan loai` matches too). Then try the hybrid search with a short question. It usually takes 1 to 3 seconds:
 
    ```bash
    qmd --index paseo-threads query "why does the git pill disappear" --no-rerank -n 5
