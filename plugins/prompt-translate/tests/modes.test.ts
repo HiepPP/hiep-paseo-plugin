@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const { run, digest } = require("../server/caveman-hook.cjs");
 const A = "00000000-0000-4000-8000-000000000001",
   B = "00000000-0000-4000-8000-000000000002";
-async function fixture() {
+async function fixture(nativeRules = "Native rules") {
   const home = await mkdtemp(path.join(tmpdir(), "pt-modes-"));
   const root = path.join(home, "plugin-data/prompt-translate");
   const native = path.join(home, "caveman/src/hooks");
@@ -26,7 +26,7 @@ async function fixture() {
   );
   await writeFile(
     path.join(native, "caveman-mode-tracker.js"),
-    `const fs=require('fs');const path=require('path');let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const mode=JSON.parse(s).prompt.split(/\\s/)[1];fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR,'mode.json'),JSON.stringify({mode:mode==='off'?null:mode}));console.log(JSON.stringify({hookSpecificOutput:{additionalContext:mode==='off'?'':'Native rules '+mode}}));});`,
+    `const fs=require('fs');const path=require('path');let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const mode=JSON.parse(s).prompt.split(/\\s/)[1];fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR,'mode.json'),JSON.stringify({mode:mode==='off'?null:mode}));console.log(JSON.stringify({hookSpecificOutput:{additionalContext:mode==='off'?'':${JSON.stringify(nativeRules)}+' '+mode}}));});`,
   );
   await writeFile(
     path.join(root, "hook-runtime.json"),
@@ -59,6 +59,24 @@ test("snapshots isolate agents and keep only prompt hashes", async () => {
   assert.equal((await readdir(pending)).length, 0);
   const next = run({ session_id: "test", prompt: "next" }, env);
   assert.match(next.hookSpecificOutput.additionalContext, /wenyan-ultra/);
+});
+test("Caveman compression preserves required response structure after native reinforcement", async () => {
+  const { modes, env } = await fixture("No preamble or recap.");
+  await modes.set(A, "ultra");
+  const context = run({ prompt: "request" }, env).hookSpecificOutput.additionalContext;
+  const finalInstruction = context.split("\n\n").at(-1);
+  assert.ok(context.indexOf("No preamble or recap.") < context.lastIndexOf(finalInstruction));
+  assert.match(
+    finalInstruction,
+    /Preserve.*headings.*sections.*lists.*tables.*code blocks.*endings.*next-step prompts/,
+  );
+  assert.match(finalInstruction, /optional repetition, never required sections/);
+  assert.match(finalInstruction, /Answer Endings.*Suggested Prompts.*fenced.*prompt:/);
+  assert.match(finalInstruction, /Explicit user format requests take priority/);
+
+  const normal = run({ prompt: "$caveman off" }, env).hookSpecificOutput.additionalContext;
+  assert.match(normal, /Normal mode\. Stop caveman/);
+  assert.doesNotMatch(normal, /Caveman changes wording only/);
 });
 test("explicit commands beat selection; Default resets; cancelled snapshots are removed", async () => {
   const { root, modes, env } = await fixture();

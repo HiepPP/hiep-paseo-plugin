@@ -115,6 +115,10 @@ function run(data, env = process.env) {
     context.push(
       "Use Simplified Chinese characters (简体字) unless the current request explicitly asks for another script.",
     );
+  if (active)
+    context.push(
+      "Caveman changes wording only, not required response format or content. Preserve headings, sections, lists, tables, code blocks, endings, and next-step prompts required by the task or applicable instructions. Any 'No preamble or recap' instruction above removes optional repetition, never required sections. Before sending, verify required Answer Endings and Suggested Prompts remain, including each required fenced prompt: suggestion. Explicit user format requests take priority.",
+    );
   const additionalContext = context.join("\n\n");
   fs.writeFileSync(
     path.join(dir, "last-hook.json"),

@@ -27,6 +27,7 @@ Learn English prompting from your own Vietnamese prompts, on Paseo desktop.
 - The hook calls the installed Caveman parser and mode tracker, including its mode-specific
   ruleset and reminders. State is isolated per Paseo agent and native session. Explicit user
   commands override the dropdown for that turn. Model compliance is still probabilistic.
+  Caveman shortens wording while preserving required response formats, endings, and next-step prompts.
 
 Choose Caveman mode in each conversation's composer. Each draft starts at Default; a new agent inherits its first-turn command and keeps
 its own selection. The legacy host-wide `cavemanMode` setting is ignored. Settings retain the
