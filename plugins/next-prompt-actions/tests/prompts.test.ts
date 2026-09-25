@@ -1,6 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parsePrompts } from "../shared/prompts";
+import { commitPrompt, parsePrompts } from "../shared/prompts";
+
+test("commit suggestions receive the skill once and preserve scope", () => {
+  assert.equal(
+    commitPrompt("Commit thay đổi. Không push."),
+    "/commit\nCommit thay đổi. Không push.",
+  );
+  assert.equal(commitPrompt("Review, then COMMIT."), "/commit\nReview, then COMMIT.");
+  assert.equal(commitPrompt("/commit\nKeep unrelated work."), "/commit\nKeep unrelated work.");
+  assert.equal(commitPrompt("Review the commitment."), null);
+  assert.equal(commitPrompt("Run tests."), null);
+});
 
 test("headings, multiline Vietnamese, multiple suggestions, and marker removal", () => {
   assert.deepEqual(

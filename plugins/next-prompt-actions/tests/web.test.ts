@@ -122,7 +122,7 @@ test("multiple prompts render one card each plus Send all, and hide the raw fenc
     assert.equal(document.querySelectorAll(".npa-why").length, 1);
     assert.equal(document.querySelector(".npa-why strong")!.textContent, "this");
     assert.equal(document.querySelectorAll(".npa-row .npa-edit").length, 3);
-    assert.equal(document.querySelector(".npa-all .npa-send")!.textContent, "Send all ↑");
+    assert.equal(document.querySelector(".npa-all .npa-send")!.textContent, "Send all");
     const pre = document.querySelector('[data-paseo-markdown-tag="pre"]')!;
     assert.equal(pre.getAttribute("data-npa-block"), "multiple");
     assert.match(
@@ -172,6 +172,90 @@ test("sending hook runs on click, before the acknowledgement, with its outcome",
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+test("Commit appears on matching cards and immediately sends the skill once without changing drafts", async () => {
+  const block = "prompt: Run tests.\nwhy: Before commit.\nprompt: Commit the fix. Do not push.";
+  const message = `## Next Steps\n\`\`\`\n${block}\n\`\`\``;
+  let currentContext: Binding = { ...context, message };
+  const current: Current = {
+    epoch: "one",
+    busy: false,
+    complete: true,
+    rows: [
+      { type: "user_message", text: "Fix the issue.", id: "0", timestamp: 1 },
+      { type: "assistant_message", text: message, id: "1", timestamp: 100 },
+    ],
+  };
+  const sent: string[] = [];
+  let acknowledge!: () => void;
+  const outcomes: Promise<boolean>[] = [];
+  const engine = new Engine(
+    new Store(),
+    {
+      read: async () => structuredClone(current),
+      async send(scope, text) {
+        assert.equal(scope.agentId, context.agentId);
+        sent.push(text);
+        await new Promise<void>((resolve) => {
+          acknowledge = resolve;
+        });
+      },
+    },
+    async () => false,
+  );
+  const { document, window } = parseHTML(
+    `<html><head></head><body><textarea data-composer-input="">unsent draft</textarea><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">${block}</span></div></div></body></html>`,
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    {
+      inspect: (scope) => engine.inspect(scope),
+      send: async (scope, key, skill) => ({ sent: await engine.send(scope, key, { skill }) }),
+      sending: (outcome) => outcomes.push(outcome),
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => currentContext,
+  );
+  try {
+    await pause();
+    const commit = document.querySelector(".npa-commit")!;
+    assert.equal(document.querySelectorAll(".npa-commit").length, 1);
+    assert.equal(commit.textContent, "Commit");
+    assert.equal(
+      commit.closest(".npa-row")!.querySelector(".npa-label")!.textContent,
+      "Commit the fix. Do not push.",
+    );
+    assert.equal(document.querySelector(".npa-all .npa-commit"), null);
+    assert.equal(commit.disabled, false);
+    currentContext = { ...currentContext, agentId: "other" };
+    commit.dispatchEvent(new window.Event("click"));
+    assert.equal(outcomes.length, 0);
+    currentContext = { ...context, message };
+    commit.dispatchEvent(new window.Event("click"));
+    commit.dispatchEvent(new window.Event("click"));
+    document.querySelectorAll(".npa-send")[1].dispatchEvent(new window.Event("click"));
+    assert.equal(outcomes.length, 1, "Board navigation starts before the send acknowledgement");
+    assert.equal(commit.disabled, true);
+    await pause();
+    assert.deepEqual(sent, ["/commit\nCommit the fix. Do not push."]);
+    assert.equal(document.querySelector("textarea")!.value, "unsent draft");
+    acknowledge();
+    assert.equal(await outcomes[0], true);
+    await pause();
+    assert.equal(commit.disabled, true);
+    assert.equal(document.querySelectorAll(".npa-send")[1].textContent, "Sent");
+    commit.dispatchEvent(new window.Event("click"));
+    assert.equal(sent.length, 1);
+  } finally {
+    cleanup();
+    engine.close();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
 test("Edit puts the prompt in the composer, replacing the draft, without sending", async () => {
   // Another conversation stays mounted with its own composer; the host marks the real field
   // with dataSet={{composerInput:""}}.
@@ -202,7 +286,7 @@ test("Edit puts the prompt in the composer, replacing the draft, without sending
   try {
     await pause();
     const edit = document.querySelector(".npa-edit")!;
-    assert.equal(edit.textContent, "Edit ↓");
+    assert.equal(edit.textContent, "Edit");
     edit.dispatchEvent(new window.Event("click"));
     assert.equal(field.value, "Test UI.");
     assert.equal(other.value, "other conversation", "another conversation must stay untouched");
@@ -285,7 +369,7 @@ test("a new turn's unsent block renders no note from the previous send", async (
   try {
     await pause();
     assert.equal(document.querySelectorAll(".npa-send").length, 1);
-    assert.equal(document.querySelector(".npa-send")!.textContent, "Send ↑");
+    assert.equal(document.querySelector(".npa-send")!.textContent, "Send");
     assert.equal(document.querySelector(".npa-note")!.textContent, "");
   } finally {
     cleanup();

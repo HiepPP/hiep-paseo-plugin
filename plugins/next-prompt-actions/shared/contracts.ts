@@ -36,7 +36,10 @@ export const inspectRpc = defineRpc({
 });
 export const sendRpc = defineRpc({
   name: "prompts.send",
-  input: scopeSchema.extend({ key: z.union([z.string(), z.array(z.string()).min(1)]) }),
+  input: scopeSchema.extend({
+    key: z.union([z.string(), z.array(z.string()).min(1)]),
+    skill: z.literal("commit").optional(),
+  }),
   // Only the outcome: the client rereads state after every action, and skipping that read here
   // lets a sent prompt return to the Board one timeline read sooner.
   output: z.object({ sent: z.boolean() }),

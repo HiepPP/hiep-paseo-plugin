@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
-import { joinPrompts, parsePrompts } from "../shared/prompts";
+import { commitPrompt, joinPrompts, parsePrompts } from "../shared/prompts";
 import { Store } from "./store";
 
 export type Row = {
@@ -114,8 +114,15 @@ export class Engine {
   async send(
     scope: Scope,
     key: string | string[],
-    automatic = false,
-    generation?: number,
+    {
+      automatic = false,
+      generation,
+      skill,
+    }: {
+      automatic?: boolean;
+      generation?: number;
+      skill?: "commit";
+    } = {},
   ): Promise<boolean> {
     const keys = typeof key === "string" ? [key] : key;
     if (this.stopped || this.locks.has(scope.agentId)) throw new Error("Send already in progress.");
@@ -135,7 +142,12 @@ export class Engine {
         picked.length !== keys.length
       )
         throw new Error("Prompt is stale, busy, or already submitted.");
-      const text = joinPrompts(picked.map((c) => c.text));
+      let text = joinPrompts(picked.map((c) => c.text));
+      if (skill === "commit") {
+        const prompt = picked.length === 1 && !automatic ? commitPrompt(text) : null;
+        if (!prompt) throw new Error("Commit requires one matching suggestion and a manual click.");
+        text = prompt;
+      }
       if (
         automatic &&
         (!entry.enabled ||
@@ -247,7 +259,7 @@ export class Engine {
         );
         return;
       }
-      await this.send(scope, candidate.key, true, generation);
+      await this.send(scope, candidate.key, { automatic: true, generation });
     } catch {
       entry.remaining = 0;
       this.store.save();

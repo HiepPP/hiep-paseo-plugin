@@ -111,6 +111,36 @@ test("Send all submits every prompt once as one numbered message", async () => {
   assert.deepEqual(states, ["sent", "sent"]);
   await assert.rejects(f.engine.send(scope, keys[1]));
 });
+test("Commit sends the selected suggestion with /commit and shares Send reservations", async () => {
+  const f = fixture();
+  f.current.rows[1].text =
+    "## Next Steps\n```\nprompt: Commit the fix. Do not push.\nwhy: Save changes.\nprompt: Run tests.\n```";
+  const [commit, other] = (await f.engine.inspect(scope)).candidates;
+  await assert.rejects(f.engine.send(scope, other.key, { skill: "commit" }));
+  await assert.rejects(f.engine.send(scope, [commit.key, other.key], { skill: "commit" }));
+  await assert.rejects(f.engine.send(scope, commit.key, { skill: "commit", automatic: true }));
+  f.current.busy = true;
+  await assert.rejects(f.engine.send(scope, commit.key, { skill: "commit" }));
+  f.current.busy = false;
+  assert.equal(f.sent.length, 0);
+  assert.equal(await f.engine.send(scope, commit.key, { skill: "commit" }), true);
+  assert.equal(f.sent[0].text, "/commit\nCommit the fix. Do not push.");
+  await assert.rejects(f.engine.send(scope, commit.key));
+  await assert.rejects(f.engine.send(scope, commit.key, { skill: "commit" }));
+  assert.equal(f.sent.length, 1);
+});
+test("Commit does not duplicate an existing skill and uncertain sends cannot retry", async () => {
+  const f = fixture();
+  f.current.rows[1].text = "## Next Steps\n```\nprompt: /commit only the fix\n```";
+  const { key } = (await f.engine.inspect(scope)).candidates[0];
+  f.failSend();
+  assert.equal(await f.engine.send(scope, key, { skill: "commit" }), false);
+  assert.equal(f.sent[0].text, "/commit only the fix");
+  assert.equal(f.store.get(scope.agentId).handled[key], "unknown");
+  await assert.rejects(f.engine.send(scope, key, { skill: "commit" }));
+  await assert.rejects(f.engine.send(scope, key));
+  assert.equal(f.sent.length, 1);
+});
 test("a new turn drops the previous turn's note", async () => {
   const f = fixture();
   await f.engine.send(scope, (await f.engine.inspect(scope)).candidates[0].key);

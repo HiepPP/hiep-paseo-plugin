@@ -2,6 +2,9 @@
 
 Send a fenced `prompt:` suggestion under `What Next` or `Next Steps` directly from its block.
 Each prompt renders as its own card with Edit and Send; the raw fence is hidden, not removed.
+Suggestions containing the word `commit` (case-insensitive) also show Commit. Clicking it sends
+`/commit` followed by that suggestion immediately, preserving its scope and the composer draft.
+An existing leading `/commit` is kept once. Commit shares Send's busy, stale, and duplicate guards.
 An optional `why:` line under a prompt shows as its reason and is never sent.
 Several prompts also get Edit all and Send all for one numbered message. The composer draft is preserved.
 
@@ -19,7 +22,7 @@ Browser and native mobile clients receive no DOM contribution.
 ## Back to Board after send
 
 Settings → Next prompt actions → Back to Board after send. Host setting; defaults OFF.
-When ON, a manual Send or Send all opens the Board at once while the send finishes in the background.
+When ON, a manual Send, Send all, or Commit opens the Board at once while the send finishes in the background.
 The Board refreshes when the send is acknowledged and shows a warning toast if it failed or is uncertain.
 Requires the `board` plugin, which listens for `paseo-board:open`, `paseo-board:sent`, and `paseo-board:send-failed`.
 

@@ -31,7 +31,7 @@ export default function contribute(client: PluginClientContext) {
     .catch(() => undefined);
   const cleanup = install({
     inspect: (scope) => client.rpc(inspectRpc, scope),
-    send: (scope, key) => client.rpc(sendRpc, { ...scope, key }),
+    send: (scope, key, skill) => client.rpc(sendRpc, { ...scope, key, skill }),
     sending(outcome) {
       if (!backToBoard.enabled) return;
       // Leave before the acknowledgement; the Board refreshes on success and warns on failure.

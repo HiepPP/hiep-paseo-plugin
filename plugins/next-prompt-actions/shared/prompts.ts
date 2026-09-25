@@ -1,6 +1,11 @@
 // `whys[i]` is the optional reason shown under `prompts[i]`; it is never sent.
 export type PromptBlock = { block: string; prompts: string[]; whys: string[] };
 
+export function commitPrompt(text: string): string | null {
+  if (!/\bcommit\b/i.test(text)) return null;
+  return /^\s*\/commit(?=\s|$)/.test(text) ? text : `/commit\n${text}`;
+}
+
 // Accept only top-level fenced suggestions in an explicit next-step section.
 export function parsePrompts(markdown: string): PromptBlock[] {
   const result: PromptBlock[] = [];
