@@ -13,7 +13,7 @@ Captured from Paseo desktop 0.9.1 using sample suggestions.
 
 Paseo 0.8.x and 0.9.0-beta.2 desktop only. The user approved this private DOM adapter; it does not edit Paseo source.
 It reads native Markdown markers and React ancestor props for host, workspace, message, and agent identity.
-Unknown shapes, partial streams, incomplete history, stale messages, and wrong hosts fail closed.
+Unknown shapes, partial streams, incomplete latest turns, stale messages, and wrong hosts fail closed.
 Browser and native mobile clients receive no DOM contribution.
 
 ## Back to Board after send
@@ -55,3 +55,6 @@ paseo plugin ls next-prompt-actions --json
 For updates, run the checks then `paseo plugin reload next-prompt-actions`.
 Check actual Send, target conversation, preserved draft, dark/light layout, and toggle behavior after reload.
 Disable removes owned DOM controls, styles, listeners, and cancels pending evaluations.
+
+Long threads need only a contiguous timeline tail containing the latest user message and reply.
+Older omitted turns do not hide Send; gaps or a missing latest-turn boundary still fail closed.

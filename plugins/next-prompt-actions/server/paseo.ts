@@ -22,7 +22,10 @@ export function createDriver(getApi: () => PaseoApi, serverId: string): Driver {
           !!handle.activeTurn ||
           !!handle.pendingPermissions?.length,
         epoch: page.epoch,
-        complete: !page.hasOlder,
+        // A contiguous tail containing a user boundary includes the entire latest turn.
+        // Older turns are not required to validate its suggested continuation.
+        complete:
+          !page.hasOlder || page.entries.some((entry) => entry.item.type === "user_message"),
         rows: page.entries.map((entry) => ({
           type: entry.item.type,
           text:
