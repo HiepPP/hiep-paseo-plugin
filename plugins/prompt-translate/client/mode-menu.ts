@@ -48,6 +48,9 @@ const styles = `
   background:color-mix(in srgb,currentColor 14%,transparent);
   outline:2px solid currentColor; outline-offset:-2px; }
 [${CONTROL}] [data-pt-check] { margin-left:14px; font-size:15px; }
+[${CONTROL}] [data-pt-menu]::backdrop {
+  background:transparent; pointer-events:auto; -webkit-app-region:no-drag;
+}
 `;
 
 function label(mode: Mode) {
@@ -128,7 +131,7 @@ export function installComposerModeMenu(
     const anchor = control.trigger.getBoundingClientRect?.();
     const height = doc.defaultView?.innerHeight;
     if (menu.showPopover && anchor && height) {
-      menu.setAttribute("popover", "manual");
+      menu.setAttribute("popover", "auto");
       menu.style.cssText += `;position:fixed;margin:0;left:${Math.max(8, Math.min(anchor.left, (doc.defaultView?.innerWidth ?? 1024) - 246))}px;top:auto;bottom:${height - anchor.top + 8}px;max-height:${Math.max(34, Math.min(310, anchor.top - 24))}px;`;
     }
     for (const mode of modes) {
@@ -159,6 +162,10 @@ export function installComposerModeMenu(
       menu.append(option);
     }
     control.menu = menu;
+    // Native light-dismiss must also clear our state so the trigger can reopen it.
+    menu.addEventListener("toggle", (event) => {
+      if (event.newState === "closed" && control.menu === menu) close(wrapper);
+    });
     wrapper.append(menu);
     if (menu.hasAttribute("popover")) menu.showPopover?.();
     control.trigger.setAttribute("aria-expanded", "true");

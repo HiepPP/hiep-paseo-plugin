@@ -94,7 +94,7 @@ test("new-thread menu opens above clipped toolbar and saves draft mode locally",
       getBoundingClientRect: () => ({ left: 100, top: 700, bottom: 728 }),
       showPopover() {
         assert.equal(element.isConnected, true);
-        assert.equal(element.getAttribute("popover"), "manual");
+        assert.equal(element.getAttribute("popover"), "auto");
         shown++;
       },
     });
@@ -122,6 +122,16 @@ test("new-thread menu opens above clipped toolbar and saves draft mode locally",
     assert.equal(dropdown.style.position, "fixed");
     assert.equal(dropdown.style.left, "100px");
     assert.equal(dropdown.style.bottom, "108px");
+    const dismissed = new window.Event("toggle");
+    Object.assign(dismissed, { newState: "closed" });
+    dropdown.dispatchEvent(dismissed);
+    assert.equal(document.querySelector("[data-pt-menu]"), null);
+    assert.equal(
+      document.querySelector("[data-pt-trigger]")!.getAttribute("aria-expanded"),
+      "false",
+    );
+    document.querySelector("[data-pt-trigger]")!.dispatchEvent(new window.Event("click"));
+    assert.equal(shown, 2);
     document
       .querySelector('[data-prompt-translate-option="lite"]')!
       .dispatchEvent(new window.Event("click"));

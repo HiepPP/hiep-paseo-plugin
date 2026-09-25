@@ -31,6 +31,7 @@ export interface El {
 }
 export interface DomEvent {
   key?: string;
+  newState?: string;
   target: unknown;
   preventDefault(): void;
   stopPropagation(): void;
