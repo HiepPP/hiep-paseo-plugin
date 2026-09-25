@@ -458,3 +458,33 @@ test("queue edit waits for exact snapshot cancellation before restoring draft", 
   assert.equal(restored, true);
   composer.stop();
 });
+
+test("new-thread draft sends unchanged without calling agent mode RPCs", async () => {
+  const { doc, field, sent } = page("first prompt");
+  Object.assign(field, {
+    __reactFiber$test: { memoizedProps: { voiceAgentId: "new-workspace" } },
+  });
+  let modeCalls = 0;
+  const composer = installComposer(
+    {
+      ...hookApi,
+      enhance: async (text) => text,
+      mode: async () => {
+        modeCalls++;
+        throw new Error("Invalid UUID");
+      },
+    },
+    { enabled: () => true, settings: () => follow },
+    doc,
+    fast,
+  );
+  try {
+    composer.onKeydown(key(field, { metaKey: false }).event);
+    await settle();
+    assert.equal(modeCalls, 0);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].value, "first prompt");
+  } finally {
+    composer.stop();
+  }
+});

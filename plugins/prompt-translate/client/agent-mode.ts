@@ -1,12 +1,16 @@
+import { z } from "zod";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { modeReadRpc, modeWriteRpc } from "../shared/contracts";
 import type { TranslateSettings } from "../shared/settings";
 import { reactProps, type El } from "./dom";
 export type Mode = TranslateSettings["cavemanMode"];
+const agentIdSchema = z.string().uuid();
 export function composerAgent(node: El): string | null {
   const field = node.querySelector("[data-composer-input], textarea") ?? node;
   const props = reactProps(field, (value) => typeof value.voiceAgentId === "string");
-  return typeof props?.voiceAgentId === "string" ? props.voiceAgentId : null;
+  // New-thread composers expose a draft key before an agent exists.
+  const id = agentIdSchema.safeParse(props?.voiceAgentId);
+  return id.success ? id.data : null;
 }
 export function createAgentModes(client: Pick<PluginClientContext, "rpc">) {
   const values = new Map<string, Mode>();
