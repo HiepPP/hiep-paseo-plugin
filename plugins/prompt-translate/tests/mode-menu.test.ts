@@ -3,9 +3,68 @@ import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { installComposerModeMenu } from "../client/mode-menu";
-import { createAgentModes } from "../client/agent-mode";
+import { composerHost, createAgentModes } from "../client/agent-mode";
 import type { Doc, El } from "../client/dom";
 import { translateSettings } from "../shared/settings";
+
+test("reused composer shows only the owning host menu", async () => {
+  const { document } = parseHTML(
+    '<html><head></head><body><div data-testid="message-input-root"><textarea></textarea><div><button data-testid="message-input-attach-button">+</button><button data-testid="agent-provider-selector">Model</button></div></div></body></html>',
+  );
+  const agentId = "00000000-0000-4000-8000-000000000011";
+  const props = { voiceAgentId: agentId, voiceServerId: "host-a" };
+  Object.assign(document.querySelector("textarea")!, {
+    __reactFiber$test: { memoizedProps: props },
+  });
+  const client = (mode: "lite" | "ultra") =>
+    ({ rpc: async () => ({ mode }) }) as unknown as PluginClientContext;
+  const clientA = client("lite");
+  const clientB = client("ultra");
+  const stateA = createAgentModes(clientA);
+  const stateB = createAgentModes(clientB);
+  await Promise.all([stateA.load(agentId), stateB.load(agentId)]);
+  const owns = (hostId: string) => (root: El) => composerHost(root) === hostId;
+  const menuB = installComposerModeMenu(
+    clientB,
+    document as unknown as Doc,
+    undefined,
+    stateB,
+    owns("host-b"),
+  );
+  const menuA = installComposerModeMenu(
+    clientA,
+    document as unknown as Doc,
+    undefined,
+    stateA,
+    owns("host-a"),
+  );
+  const assertMenu = (label: string) => {
+    assert.equal(document.querySelectorAll("[data-prompt-translate-mode]").length, 1);
+    assert.equal(document.querySelector("[data-pt-label]")?.textContent, label);
+  };
+  try {
+    assertMenu("Caveman: Lite");
+    props.voiceServerId = "host-b";
+    menuA.scan();
+    menuB.scan();
+    menuB.update();
+    assertMenu("Caveman: Ultra");
+    props.voiceServerId = "host-a";
+    menuB.scan();
+    menuA.scan();
+    menuA.update();
+    assertMenu("Caveman: Lite");
+    props.voiceServerId = "host-b";
+    menuA.scan();
+    menuB.scan();
+    menuB.update();
+    menuA.stop();
+    assertMenu("Caveman: Ultra");
+  } finally {
+    menuA.stop();
+    menuB.stop();
+  }
+});
 
 test("composer dropdown saves the agent Caveman mode and cleans up", async () => {
   const { document, window } = parseHTML(

@@ -89,7 +89,12 @@ export type Observer = new (callback: () => void) => {
   disconnect(): void;
 };
 
-type Fiber = { memoizedProps?: Record<string, unknown>; return?: Fiber };
+type Fiber = {
+  memoizedProps?: Record<string, unknown>;
+  return?: Fiber;
+  alternate?: Fiber;
+  stateNode?: { current?: Fiber };
+};
 
 // Private host detail: React stores the fiber on the DOM node under a randomized key.
 export function reactProps(
@@ -99,6 +104,13 @@ export function reactProps(
   const key = Object.keys(node).find((name) => name.startsWith("__reactFiber$"));
   if (!key) return null;
   let fiber = (node as unknown as Record<string, Fiber | undefined>)[key];
+  // A reused composer can still point at React's previous host/agent buffer.
+  let root = fiber;
+  for (let depth = 0; root?.return && depth < 200; depth++) root = root.return;
+  if (root?.stateNode?.current && root.stateNode.current !== root) {
+    fiber = fiber?.alternate;
+    if (!fiber) return null;
+  }
   for (let depth = 0; fiber && depth < 40; depth++, fiber = fiber.return)
     if (fiber.memoizedProps && match(fiber.memoizedProps)) return fiber.memoizedProps;
   return null;

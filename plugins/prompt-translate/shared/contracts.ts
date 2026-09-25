@@ -6,6 +6,12 @@ import { cavemanModeSchema } from "./settings";
 export const MAX_TEXT = 20_000;
 const text = z.string().min(1).max(MAX_TEXT);
 
+export const hostRpc = defineRpc({
+  name: "translate.host",
+  input: z.object({}),
+  output: z.object({ serverId: z.string().min(1) }),
+});
+
 export const translateRpc = defineRpc({
   name: "translate.translate",
   input: z.object({ text, cacheOnly: z.boolean().default(false) }),

@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 import { installComposer } from "../client/composer";
-import type { Doc, El, Key } from "../client/dom";
+import { composerHost } from "../client/agent-mode";
+import type { Doc, DomEvent, El, Key } from "../client/dom";
 import { translateSettings } from "../shared/settings";
 
 type Sent = { key: string; metaKey: boolean; value: string | undefined };
@@ -71,11 +72,254 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
+function multiHostPage(value: string, hostId: string) {
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div data-testid="message-input-root"><textarea data-composer-input></textarea><button id="send" role="button">Send</button></div></body></html>',
+  );
+  (window as unknown as Record<string, unknown>).KeyboardEvent = class extends window.Event {
+    key: string;
+    metaKey: boolean;
+    ctrlKey: boolean;
+    constructor(
+      type: string,
+      init: { key: string; metaKey?: boolean; ctrlKey?: boolean; bubbles?: boolean },
+    ) {
+      super(type, init);
+      this.key = init.key;
+      this.metaKey = Boolean(init.metaKey);
+      this.ctrlKey = Boolean(init.ctrlKey);
+    }
+  };
+  const field = document.querySelector("textarea") as unknown as El;
+  const props = {
+    voiceAgentId: "0c5be16b-a9e0-44c4-8caa-db8aff761e2f",
+    voiceServerId: hostId,
+  };
+  Object.assign(field, { __reactFiber$test: { memoizedProps: props } });
+  field.value = value;
+  return {
+    doc: document as unknown as Doc,
+    field,
+    button: document.querySelector("#send") as unknown as El,
+    props,
+  };
+}
+
+function captureDispatcher(
+  doc: Doc,
+  field: El,
+  button: El,
+  deliver: (type: "keydown" | "click", event: Key & DomEvent) => void,
+) {
+  type Handler = (event: Key & DomEvent) => void;
+  const handlers = { keydown: [] as Handler[], click: [] as Handler[] };
+  const target = doc as unknown as {
+    addEventListener(name: string, handler: Handler, capture?: boolean): void;
+    removeEventListener(name: string, handler: Handler, capture?: boolean): void;
+  };
+  target.addEventListener = (name, handler, capture) => {
+    if (capture && (name === "keydown" || name === "click")) handlers[name].push(handler);
+  };
+  target.removeEventListener = (name, handler, capture) => {
+    if (!capture || (name !== "keydown" && name !== "click")) return;
+    const index = handlers[name].indexOf(handler);
+    if (index >= 0) handlers[name].splice(index, 1);
+  };
+  let dispatches = 0;
+  const dispatch = (type: "keydown" | "click", eventTarget: El, init: Partial<Key> = {}) => {
+    if (++dispatches > 20) throw new Error("runaway synthetic replay");
+    let stopped = false;
+    const event = {
+      key: type === "keydown" ? "Enter" : "",
+      metaKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      isComposing: false,
+      target: eventTarget,
+      preventDefault() {},
+      stopPropagation() {},
+      stopImmediatePropagation() {
+        stopped = true;
+      },
+      ...init,
+    } as Key & DomEvent;
+    for (const handler of handlers[type]) {
+      handler(event);
+      if (stopped) return false;
+    }
+    deliver(type, event);
+    return true;
+  };
+  field.dispatchEvent = ((event: Key & { type?: string }) => {
+    if (event.type !== "keydown") return true;
+    return dispatch("keydown", field, {
+      key: event.key,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      isComposing: event.isComposing,
+      keyCode: event.keyCode,
+    });
+  }) as El["dispatchEvent"];
+  button.click = () => void dispatch("click", button);
+  return {
+    keydown: (init: Partial<Key> = {}) => dispatch("keydown", field, init),
+    click: () => dispatch("click", button),
+  };
+}
+
+async function eventually(check: () => boolean) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (check()) return;
+    await settle();
+  }
+  assert.fail("timed out waiting for composer replay");
+}
 const badge = (doc: Doc) =>
   (doc as unknown as { querySelector(selector: string): El | null }).querySelector(
     "[data-prompt-translate-badge]",
   );
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+for (const destination of ["host-a", "host-b"])
+  for (const order of [
+    ["host-a", "host-b"],
+    ["host-b", "host-a"],
+  ] as const)
+    test(`${destination} composer owns Enter and Send with ${order.join(" then ")} listeners`, async () => {
+      const { doc, field, button } = multiHostPage("keyboard draft", destination);
+      const delivered = { keydown: 0, click: 0 };
+      const dispatcher = captureDispatcher(doc, field, button, (type) => {
+        delivered[type]++;
+        field.value = "";
+      });
+      const calls = new Map<string, string[]>([
+        ["host-a", []],
+        ["host-b", []],
+      ]);
+      const composers = order.map((hostId) => {
+        let rpcCalls = 0;
+        const bounded = <T>(value: T) => {
+          if (++rpcCalls > 8) return Promise.reject<T>(new Error("runaway composer RPC loop"));
+          return Promise.resolve(value);
+        };
+        return installComposer(
+          {
+            ...hookApi,
+            enhance: async (text) => text,
+            mode: async () => {
+              calls.get(hostId)!.push("mode");
+              return bounded("follow-agent" as const);
+            },
+            prepare: async ({ text }) => {
+              calls.get(hostId)!.push(`prepare:${text}`);
+              return bounded({ token: `${hostId}-token` });
+            },
+          },
+          {
+            enabled: () => true,
+            settings: () => follow,
+            owns: (node) => composerHost(node) === hostId,
+          },
+          doc,
+          { send: 0, verify: 20 },
+        );
+      });
+      try {
+        dispatcher.keydown();
+        await eventually(() => delivered.keydown === 1);
+        field.value = "button draft";
+        dispatcher.click();
+        await eventually(() => delivered.click === 1);
+        assert.deepEqual(delivered, { keydown: 1, click: 1 });
+        assert.deepEqual(calls.get(destination), [
+          "mode",
+          "prepare:keyboard draft",
+          "mode",
+          "mode",
+          "prepare:button draft",
+          "mode",
+        ]);
+        assert.deepEqual(calls.get(destination === "host-a" ? "host-b" : "host-a"), []);
+      } finally {
+        for (const composer of composers) composer.stop();
+      }
+    });
+
+test("composer host ownership follows React's active fiber buffer", () => {
+  const { field } = multiHostPage("draft", "stale-host");
+  const activeRoot = {};
+  const staleRoot = { stateNode: { current: activeRoot } };
+  Object.assign(field, {
+    __reactFiber$test: {
+      memoizedProps: { voiceServerId: "stale-host" },
+      return: staleRoot,
+      alternate: {
+        memoizedProps: { voiceServerId: "active-host" },
+        return: activeRoot,
+      },
+    },
+  });
+  assert.equal(composerHost(field), "active-host");
+});
+
+test("host switch cancels a pending enhancement before replay", async () => {
+  const { doc, field, button, props } = multiHostPage("draft", "host-a");
+  let delivered = 0;
+  const dispatcher = captureDispatcher(doc, field, button, () => delivered++);
+  const pendingEnhancement = deferred();
+  const composer = installComposer(
+    { ...hookApi, enhance: () => pendingEnhancement.promise },
+    {
+      enabled: () => true,
+      settings: () => follow,
+      owns: (node) => composerHost(node) === "host-a",
+    },
+    doc,
+    { send: 0, verify: 20 },
+  );
+  try {
+    dispatcher.keydown({ metaKey: true });
+    props.voiceServerId = "host-b";
+    pendingEnhancement.resolve("enhanced");
+    await wait(5);
+    assert.equal(delivered, 0);
+    assert.equal(field.value, "draft");
+  } finally {
+    composer.stop();
+  }
+});
+
+test("Escape from another host does not cancel the local enhancement", async () => {
+  const { doc, field, button, props } = multiHostPage("draft", "host-a");
+  const delivered: string[] = [];
+  const dispatcher = captureDispatcher(doc, field, button, (_type, event) => {
+    delivered.push(event.key);
+    if (event.key === "Enter") field.value = "";
+  });
+  const pendingEnhancement = deferred();
+  const composer = installComposer(
+    { ...hookApi, enhance: () => pendingEnhancement.promise },
+    {
+      enabled: () => true,
+      settings: () => follow,
+      owns: (node) => composerHost(node) === "host-a",
+    },
+    doc,
+    { send: 0, verify: 20 },
+  );
+  try {
+    dispatcher.keydown({ metaKey: true });
+    props.voiceServerId = "host-b";
+    dispatcher.keydown({ key: "Escape" });
+    props.voiceServerId = "host-a";
+    pendingEnhancement.resolve("enhanced");
+    await eventually(() => delivered.includes("Enter"));
+    assert.deepEqual(delivered, ["Escape", "Enter"]);
+  } finally {
+    composer.stop();
+  }
+});
 
 test("Cmd+Enter enhances the draft, then sends it with a plain Enter", async () => {
   const { doc, field, sent } = page("sửa lỗi");

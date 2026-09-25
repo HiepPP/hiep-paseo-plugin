@@ -5,6 +5,11 @@ import type { TranslateSettings } from "../shared/settings";
 import { reactProps, type El } from "./dom";
 export type Mode = TranslateSettings["cavemanMode"];
 const agentIdSchema = z.string().uuid();
+export function composerHost(node: El): string | null {
+  const field = node.querySelector("[data-composer-input], textarea") ?? node;
+  const props = reactProps(field, (value) => typeof value.voiceServerId === "string");
+  return (props?.voiceServerId as string | undefined) ?? null;
+}
 export function composerAgent(node: El): string | null {
   const field = node.querySelector("[data-composer-input], textarea") ?? node;
   const props = reactProps(field, (value) => typeof value.voiceAgentId === "string");

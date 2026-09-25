@@ -1,6 +1,28 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { boardRpc, removeRunRpc, type BoardRun } from "../shared/board";
 
+export async function removeFinishedRun(
+  run: Pick<BoardRun, "id" | "endedAt">,
+  observingSince: string,
+  remove: (scope: string) => Promise<{ removed: boolean }>,
+  read: () => Promise<{
+    observingSince: string;
+    runs: readonly Pick<BoardRun, "id" | "status" | "endedAt">[];
+  }>,
+) {
+  if ((await remove(observingSince)).removed) return true;
+  const fresh = await read();
+  const current = fresh.runs.find((item) => item.id === run.id);
+  if (!current) return true;
+  if (
+    fresh.observingSince === observingSince ||
+    current.status === "running" ||
+    current.endedAt !== run.endedAt
+  )
+    return false;
+  return (await remove(fresh.observingSince)).removed;
+}
+
 export function installRemoveButtons(
   client: PluginClientContext,
   openParent: (agentId: string) => void,
@@ -101,12 +123,18 @@ export function installRemoveButtons(
         }
         if (run.status === "running") continue;
         const remove = async () => {
-          const result = await client.rpc(removeRunRpc, {
-            id: run.id,
-            observingSince: snapshot.observingSince,
-            endedAt: run.endedAt,
-          });
-          if (!result.removed) throw new Error("Run changed. Refresh and retry.");
+          const removed = await removeFinishedRun(
+            run,
+            snapshot.observingSince,
+            (scope) =>
+              client.rpc(removeRunRpc, {
+                id: run.id,
+                observingSince: scope,
+                endedAt: run.endedAt,
+              }),
+            () => client.rpc(boardRpc, {}),
+          );
+          if (!removed) throw new Error("Run changed. Refresh and retry.");
           revision++;
           for (const registry of [buttons, newThreadButtons]) {
             registry.get(run.id)?.remove();

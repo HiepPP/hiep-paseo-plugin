@@ -15,6 +15,8 @@ Learn English prompting from your own Vietnamese prompts, on Paseo desktop.
 - Caveman mode is read immediately before each desktop composer send (Enter or the primary
   send/queue button). Cmd/Ctrl+Enter enhances the text first, then applies the latest selection,
   including changes made while enhancement is running.
+- With multiple hosts connected, only the composer's host handles its Enter/Send actions and
+  Caveman menu. Unidentified hosts leave normal submission untouched.
 - Default resets earlier Caveman modes and restores the agent's normal response style and the
   current request's language. The stored `follow-agent` value is retained for compatibility.
   Explicit `/caveman` or `$caveman` commands in the draft take priority over the dropdown.

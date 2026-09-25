@@ -73,6 +73,7 @@ export function installComposerModeMenu(
   doc: Doc,
   Observer: Observer | undefined,
   state: AgentModeState,
+  owns: (root: El) => boolean = () => true,
 ) {
   const controls = new Map<El, { trigger: El; label: El; menu: El | null }>();
   const style = doc.createElement("style");
@@ -92,10 +93,11 @@ export function installComposerModeMenu(
   }
 
   async function save(mode: Mode, trigger: El) {
-    if (saving) return;
+    const root = trigger.closest(ROOT);
+    if (saving || !root || !owns(root)) return;
     saving = true;
     trigger.setAttribute("aria-busy", "true");
-    const id = composerModeKey(trigger.closest(ROOT)!);
+    const id = composerModeKey(root);
     try {
       if (!id) throw new Error("Open an agent conversation first");
       await state.set(id, mode);
@@ -111,9 +113,10 @@ export function installComposerModeMenu(
 
   function open(wrapper: El) {
     const control = controls.get(wrapper);
-    if (!control || control.menu) return;
+    const root = wrapper.closest(ROOT);
+    if (!control || control.menu || !root || !owns(root)) return;
     for (const other of controls.keys()) close(other);
-    const id = composerModeKey(wrapper.closest(ROOT)!);
+    const id = composerModeKey(root);
     if (!id || state.get(id) === undefined) return;
     const selectedMode = state.get(id);
     const choose = (mode: Mode) => {
@@ -187,8 +190,16 @@ export function installComposerModeMenu(
   function scan() {
     scheduled = false;
     if (stopped) return;
-    for (const wrapper of controls.keys()) if (!wrapper.isConnected) controls.delete(wrapper);
+    for (const wrapper of controls.keys()) {
+      const root = wrapper.closest(ROOT);
+      if (!wrapper.isConnected || !root || !owns(root)) {
+        close(wrapper);
+        wrapper.remove();
+        controls.delete(wrapper);
+      }
+    }
     for (const root of Array.from(doc.querySelectorAll(ROOT))) {
+      if (!owns(root)) continue;
       const id = composerModeKey(root);
       if (id) void state.load(id).catch(() => undefined);
       const slot = modelSlot(root);
@@ -301,7 +312,13 @@ export function installComposerModeMenu(
   function update() {
     for (const [wrapper, control] of controls) {
       const root = wrapper.closest(ROOT);
-      const model = root?.querySelector('[data-testid="combined-model-selector"]');
+      if (!root || !owns(root)) {
+        close(wrapper);
+        wrapper.remove();
+        controls.delete(wrapper);
+        continue;
+      }
+      const model = root.querySelector('[data-testid="combined-model-selector"]');
       const modelLabel =
         model &&
         Array.from(model.querySelectorAll("div,span")).find(
@@ -315,7 +332,7 @@ export function installComposerModeMenu(
           control.trigger.setAttribute("data-pt-typography", css);
         }
       }
-      const id = root && composerModeKey(root);
+      const id = composerModeKey(root);
       const mode = id ? state.get(id) : undefined;
       const text = `Caveman: ${mode ? label(mode) : id ? "Loading…" : "Default"}`;
       if (control.label.textContent !== text) {
@@ -332,7 +349,7 @@ export function installComposerModeMenu(
     for (const wrapper of controls.keys()) {
       if (!wrapper.isConnected) continue;
       const root = wrapper.closest(ROOT);
-      const id = root && composerModeKey(root);
+      const id = root && owns(root) && composerModeKey(root);
       if (id && !id.startsWith("draft:")) void state.load(id, true).catch(() => undefined);
     }
   }, 2000);

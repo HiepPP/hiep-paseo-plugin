@@ -28,6 +28,7 @@ import { orbSettings, type OrbSettings } from "../shared/orb";
 import { lastSettings } from "./warm";
 import { subscribeSendResult } from "./events";
 import { useClock } from "./clock";
+import { removeFinishedRun } from "./remove";
 
 const SECOND = 1_000;
 // Shape lock: cards 12, controls and chips 8.
@@ -1154,9 +1155,9 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
     retry: false,
     refetchInterval: 2_000,
     refetchOnWindowFocus: false,
-    // Opening a thread pops the Board off the host stack, so every return mounts it anew.
-    // Keeping the last snapshot paints it at once instead of "Loading runs…".
-    gcTime: Infinity,
+    // Opening a thread unmounts Board. Drop its cached snapshot so a thread's Remove
+    // action cannot briefly show the removed card when Board mounts again.
+    gcTime: 0,
   });
   const toast = useToast();
   const { refetch } = board;
@@ -1228,12 +1229,13 @@ export function BoardPage({ host, theme, layout, navigation }: PluginSurfaceProp
   const onRemove = useStableCallback(async (id: string) => {
     const run = runs.find((item) => item.id === id);
     if (!run) return;
-    const result = await removeRun({
-      id,
-      observingSince: board.data!.observingSince,
-      endedAt: run.endedAt,
-    });
-    if (!result.removed) throw new Error("Run changed. Refresh and retry.");
+    const removed = await removeFinishedRun(
+      run,
+      board.data!.observingSince,
+      (scope) => removeRun({ id, observingSince: scope, endedAt: run.endedAt }),
+      () => readBoard({}),
+    );
+    if (!removed) throw new Error("Run changed. Refresh and retry.");
     await board.refetch({ throwOnError: true });
   });
   const s = (value: number) => value * scale;

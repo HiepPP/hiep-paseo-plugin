@@ -1,7 +1,9 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
+  hostRpc,
   enhanceRpc,
   originalRpc,
   translateRpc,
@@ -22,6 +24,9 @@ import { Store } from "./server/store";
 export default function contribute(server: PluginServerContext) {
   const home = process.env.PASEO_HOME || path.join(homedir(), ".paseo");
   const configFile = path.join(home, "config.json");
+  const serverId =
+    process.env.PASEO_SERVER_ID?.trim() ||
+    readFileSync(path.join(home, "server-id"), "utf8").trim();
   const settings = server.registerSettings(translateSettings);
   const store = new Store(path.join(home, "plugin-data/prompt-translate/cache.json"));
   const modes = new AgentModes(path.join(home, "plugin-data/prompt-translate"));
@@ -29,6 +34,7 @@ export default function contribute(server: PluginServerContext) {
     const value = await settings.read();
     return value.status === "ready" ? value.values : translateSettings.schema.parse({});
   };
+  server.handle(hostRpc, () => ({ serverId }));
   server.handle(modeReadRpc, ({ agentId }) => modes.get(agentId));
   server.handle(modeWriteRpc, ({ agentId, mode }) => modes.set(agentId, mode));
   server.handle(prepareModeRpc, async (input) => modes.prepare(input, await readSettings()));

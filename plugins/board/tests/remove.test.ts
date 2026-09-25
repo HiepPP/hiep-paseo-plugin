@@ -1,8 +1,33 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PluginClientContext, PluginComposerPillContribution } from "@getpaseo/plugin/client";
-import { installRemoveButtons } from "../client/remove";
+import { installRemoveButtons, removeFinishedRun } from "../client/remove";
 import { boardRpc } from "../shared/board";
+
+test("Remove retries a stale plugin scope only for the same finished turn", async () => {
+  const scopes: string[] = [];
+  const remove = async (scope: string) => {
+    scopes.push(scope);
+    return { removed: scope === "current" };
+  };
+  const run = { id: "finished", endedAt: "end" };
+  assert.equal(
+    await removeFinishedRun(run, "old", remove, async () => ({
+      observingSince: "current",
+      runs: [{ ...run, status: "completed" as const }],
+    })),
+    true,
+  );
+  assert.deepEqual(scopes, ["old", "current"]);
+  assert.equal(
+    await removeFinishedRun(run, "old", remove, async () => ({
+      observingSince: "current",
+      runs: [{ id: "finished", endedAt: "new end", status: "completed" as const }],
+    })),
+    false,
+  );
+  assert.deepEqual(scopes, ["old", "current", "old"]);
+});
 
 test("only finished threads get Remove; navigate only after confirmed removal; clean up", async () => {
   const pills = new Map<string, PluginComposerPillContribution>();

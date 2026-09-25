@@ -59,11 +59,12 @@ function pressEnter(field: El, doc: Doc, modifiers: Partial<Key> = {}): boolean 
 
 export function installComposer(
   api: ComposerApi,
-  options: { enabled(): boolean; settings(): TranslateSettings },
+  options: { enabled(): boolean; settings(): TranslateSettings; owns?(field: El): boolean },
   doc: Doc,
   // send: let React adopt the new text before Enter; verify: when an unsent prompt means failure.
   timing = { send: 50, verify: 1_500 },
 ) {
+  const owns = options.owns ?? (() => true);
   const firstTurnText = new WeakMap<El, { prompt: string; original: string }>();
   const queueBindings = new Map<string, Promise<unknown>>();
   let editingQueue = false;
@@ -105,7 +106,7 @@ export function installComposer(
   async function prepareSend(field: El, source: string, replay: () => void) {
     const draft = field.value ?? "";
     const agentId = composerAgent(field);
-    if (!draft.trim() || pending || editingQueue) return;
+    if (!owns(field) || !draft.trim() || pending || editingQueue) return;
     if (!agentId) {
       const key = composerModeKey(field);
       const request = { field, draft };
@@ -114,6 +115,7 @@ export function installComposer(
         const mode = key ? await api.mode(key) : "follow-agent";
         if (
           pending !== request ||
+          !owns(field) ||
           !field.isConnected ||
           field.value !== draft ||
           composerModeKey(field) !== key
@@ -131,23 +133,26 @@ export function installComposer(
         }
         if (
           pending !== request ||
+          !owns(field) ||
           !field.isConnected ||
           field.value !== prompt ||
           composerModeKey(field) !== key
         )
           return;
-        if (key && (await api.mode(key)) !== mode) {
-          fillField(field, original, doc);
-          pending = null;
-          return prepareSend(field, source, replay);
-        }
+        const latest = key ? await api.mode(key) : mode;
         if (
+          !owns(field) ||
           pending !== request ||
           !field.isConnected ||
           field.value !== prompt ||
           composerModeKey(field) !== key
         )
           return;
+        if (latest !== mode) {
+          fillField(field, original, doc);
+          pending = null;
+          return prepareSend(field, source, replay);
+        }
         syntheticSend = field;
         try {
           replay();
@@ -165,6 +170,7 @@ export function installComposer(
     pending = request;
     const valid = () =>
       pending === request &&
+      owns(field) &&
       field.isConnected &&
       field.value === draft &&
       composerAgent(field) === agentId;
@@ -203,7 +209,12 @@ export function installComposer(
           }
         });
         later(timing.verify, () => {
-          if (field.isConnected && field.value === draft) {
+          if (
+            owns(field) &&
+            composerAgent(field) === agentId &&
+            field.isConnected &&
+            field.value === draft
+          ) {
             void api.cancel(agentId, sentToken).catch(() => undefined);
             say(UNSENT, 4000);
           }
@@ -220,7 +231,12 @@ export function installComposer(
   function send(field: El, prompt: string, source: string) {
     const agentId = composerModeKey(field);
     later(timing.send, () => {
-      if (field.isConnected && field.value === prompt && composerModeKey(field) === agentId)
+      if (
+        owns(field) &&
+        field.isConnected &&
+        field.value === prompt &&
+        composerModeKey(field) === agentId
+      )
         void prepareSend(field, source, () => {
           if (!pressEnter(field, doc)) say(UNSENT, 4000);
         });
@@ -247,6 +263,8 @@ export function installComposer(
   }
 
   function onKeydown(event: Key) {
+    const field = (event.target as El | null)?.closest?.(FIELD) ?? null;
+    if (!field || !owns(field)) return;
     if (event.key === "Escape" && pending) {
       pending = null;
       say(null);
@@ -257,11 +275,6 @@ export function installComposer(
     if (event.key !== "Enter" && event.key !== " ") return;
     if (event.shiftKey) return;
     if (event.isComposing || event.keyCode === 229) return;
-    const field = (event.target as El | null)?.closest?.(FIELD) ?? null;
-    if (!field) {
-      // Native keyboard button activation produces a click handled below.
-      return;
-    }
     if (event.key !== "Enter") return;
     if (syntheticSend === field) return;
     // In compact windows Enter inserts a newline; an open autocomplete consumes Enter.
@@ -285,7 +298,8 @@ export function installComposer(
       (prompt) => {
         if (pending !== request) return;
         pending = null;
-        if (!field.isConnected || composerModeKey(field) !== request.agentId) return say(null);
+        if (!owns(field) || !field.isConnected || composerModeKey(field) !== request.agentId)
+          return say(null);
         if (field.value !== draft) return say("Bản nháp đã đổi, bỏ qua kết quả enhance", 4000);
         if (!fillField(field, prompt, doc)) return say("Composer không nhận text đã enhance", 4000);
         say(null);
@@ -312,7 +326,7 @@ export function installComposer(
         while (parent && !parent.querySelector(FIELD)) parent = parent.parentElement;
         const field = parent?.querySelector(FIELD);
         const agentId = field && composerAgent(field);
-        if (agentId) {
+        if (field && owns(field) && agentId) {
           event.preventDefault();
           event.stopImmediatePropagation();
           if (editingQueue) return;
@@ -321,6 +335,7 @@ export function installComposer(
             try {
               await queueBindings.get(row.id);
               await api.cancelQueue(agentId, row.id);
+              if (!owns(field) || !field.isConnected || composerAgent(field) !== agentId) return;
               replayingQueueEdit = true;
               try {
                 button.click();
@@ -343,7 +358,7 @@ export function installComposer(
     const buttons = Array.from(root.querySelectorAll('button,[role="button"]'));
     if (buttons.at(-1) !== button) return;
     const field = root.querySelector(FIELD);
-    if (!field || syntheticSend === field || !field.value?.trim()) return;
+    if (!field || !owns(field) || syntheticSend === field || !field.value?.trim()) return;
     const action = reactProps(button, (props) => typeof props.onDefaultSendAction === "function");
     if (action?.canPressLoadingButton) return;
     event.preventDefault();
