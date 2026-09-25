@@ -175,6 +175,46 @@ test("Git actions require a manual click without consuming a Jev evaluation", as
   assert.equal(f.sent.length, 0);
   assert.match((await f.engine.inspect(scope)).note, /Git actions require a click/);
 });
+for (const [name, text] of [
+  ["button names", "Commit sửa nút Edit, Push và Send."],
+  ["scoped exclusion", "Commit plugin changes. Không commit WIP khác."],
+  ["Push last in button list", "Commit sửa nút Edit, Send và Push."],
+  ["command after comma", "Kiểm tra diff, commit phần sửa lỗi."],
+  ["coordinated negation", "Commit và push bản sửa. Không commit WIP khác hay push."],
+]) {
+  test(`Git regression: ${name} keeps no-push payload and requires individual manual send`, async () => {
+    let evaluations = 0;
+    const f = fixture(async () => {
+      evaluations++;
+      return true;
+    });
+    f.current.rows[1].text = `## Next Steps\n\`\`\`\nprompt: ${text}\n\`\`\``;
+    try {
+      await f.engine.toggle(scope, true);
+      f.engine.started(scope.agentId);
+      await f.engine.ended(scope, true);
+      assert.equal(evaluations, 0);
+      assert.equal(f.sent.length, 0);
+      assert.match((await f.engine.inspect(scope)).note, /Git actions require a click/);
+      const { key } = (await f.engine.inspect(scope)).candidates[0];
+      await assert.rejects(
+        f.engine.send(scope, key, { automatic: true }),
+        /individual manual send/,
+      );
+      f.current.rows[1].text = `## Next Steps\n\`\`\`\nprompt: ${text}\nprompt: Run tests.\n\`\`\``;
+      const keys = (await f.engine.inspect(scope)).candidates.map((candidate) => candidate.key);
+      await assert.rejects(f.engine.send(scope, keys), /individual manual send/);
+      assert.equal(f.sent.length, 0);
+      await f.engine.send(scope, keys[0]);
+      assert.equal(
+        f.sent[0].text,
+        `/commit --no-push\n${text}\nCommit only the described changes. Preserve unrelated work.`,
+      );
+    } finally {
+      f.engine.close();
+    }
+  });
+}
 test("a new turn drops the previous turn's note", async () => {
   const f = fixture();
   await f.engine.send(scope, (await f.engine.inspect(scope)).candidates[0].key);

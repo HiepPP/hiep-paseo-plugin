@@ -17,18 +17,36 @@ export function gitAction(text: string): GitAction | null {
   const skill = /^\s*[/$]commit(?=\s|$)/i.test(text);
   const clauses = normalized
     .replace(/^\s*[/$]commit(?=\s|$)/, "commit")
-    .split(/[!?;,\n]+|\.(?=\s|$)|\b(?:then|roi|sau do)\b/);
-  const commands = clauses.map((clause) =>
-    clause
+    .split(/[!?;\n]+|\.(?=\s|$)|\b(?:then|roi|sau do)\b/);
+  const commandText = (part: string) =>
+    part
       .trim()
       .replace(/^(?:(?:please|hay|vui long|chi can|chi)\s+)+/, "")
       .replace(/^git\s+/, "")
-      .replace(/^(?:create(?: a)?|tao(?: mot)?)\s+(?=commit\b)/, ""),
-  );
-  const denied = (verb: string) =>
-    new RegExp(
-      `\\b(?:do not|don['’]t|never|not|no|without|avoid|skip|khong|chua|dung|cam)(?:\\s+\\w+){0,3}\\s+${verb}\\b`,
-    ).test(normalized);
+      .replace(/^(?:create(?: a)?|tao(?: mot)?)\s+(?=commit\b)/, "");
+  const labelList =
+    /^(?:edit|send|commit|push)(?:\s*(?:and|va|&|\+)\s*(?:edit|send|commit|push))*(?:\s+(?:buttons?|controls?|labels?))?$/;
+  // Keep noun-list context across commas and conjunctions, while retaining commands with targets.
+  const commands = clauses.flatMap((clause) => {
+    const labels =
+      /\b(?:buttons?|controls?|labels?|nut)\b|\b(?:edit|send)(?=\s*(?:,|and\b|va\b|[&+]|$))/.test(
+        clause,
+      );
+    return clause
+      .split(",")
+      .filter((part) => !labels || !labelList.test(part.trim()))
+      .map((part) => ({ text: commandText(part), labels }));
+  });
+  const denied = (verb: string, scopeException?: RegExp) =>
+    [
+      ...normalized.matchAll(
+        new RegExp(
+          // A negation governs coordinated verbs too: "do not commit unrelated files or push".
+          `\\b(?:do not|don['’]t|never|not|no|without|avoid|skip|khong|chua|dung|cam)(?:[ \\t]+\\w+)*?[ \\t]+${verb}\\b`,
+          "g",
+        ),
+      ),
+    ].some((match) => !scopeException?.test(normalized.slice(match.index! + match[0].length)));
   const isCommit = (command: string) =>
     /^commit(?=[:\s]|$)(?!\s+(?:messages?|buttons?|hash|sha|history|status|diff|log|is|was|has|da|already|done|completed)\b)/.test(
       command,
@@ -37,19 +55,26 @@ export function gitAction(text: string): GitAction | null {
     /^push(?=[:\s]|$)(?!\s+(?:notifications?|buttons?|events?|messages?|behavior|is|was|has|da|already|done|completed)\b)/.test(
       command,
     );
-  const commit = !denied("commit(?:ting|s)?") && (skill || commands.some(isCommit));
+  // Excluding unrelated work narrows a positive commit request; it does not cancel it.
+  const unrelatedScope =
+    /^\s+(?:unrelated\b|other\s+(?:files|changes)\b|wip\s+khac\b|(?:cac\s+)?(?:file|thay doi)\s+(?:khac|khong lien quan)\b)/;
+  const commit =
+    !denied("commit(?:ting|s)?", unrelatedScope) &&
+    (skill || commands.some(({ text }) => isCommit(text)));
   const noPush = /--no-push\b/.test(normalized) || denied("push(?:ing)?");
   const push =
     !noPush &&
-    (commands.some(isPush) ||
+    (commands.some(({ text }) => isPush(text)) ||
       (commit &&
         commands.some(
-          (command) =>
-            isCommit(command) &&
-            command
+          ({ text, labels }) =>
+            isCommit(text) &&
+            text
               .split(/\b(?:and|va)\b|[&+]/)
               .slice(1)
-              .some((part) => isPush(part.trim().replace(/^git\s+/, ""))),
+              .some(
+                (part) => isPush(commandText(part)) && (!labels || !labelList.test(part.trim())),
+              ),
         )));
   if (!commit) return push ? { kind: "push", label: "Push", prompt: text } : null;
 

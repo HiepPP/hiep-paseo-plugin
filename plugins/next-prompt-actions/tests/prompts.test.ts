@@ -14,6 +14,16 @@ test("explicit Git actions distinguish commit, commit and push, and push only", 
     ["Commit và push thay đổi.", "commit-push"],
     ["Commit & Push.", "commit-push"],
     ["Commit xong rồi push origin/main.", "commit-push"],
+    ["Commit the fix, then push origin/main.", "commit-push"],
+    ["Commit and push the fix. Do not commit unrelated files.", "commit-push"],
+    ["Kiểm tra diff, commit phần sửa lỗi.", "commit"],
+    ["Run tests, commit the fix.", "commit"],
+    ["Commit the fix, push origin/main.", "commit-push"],
+    ["Commit the button fixes, then push origin/main.", "commit-push"],
+    ["Commit the button fixes and push origin/main.", "commit-push"],
+    ["Commit the button fixes, git push.", "commit-push"],
+    ["Commit the button fixes and git push.", "commit-push"],
+    ["Review the buttons, commit the fix.", "commit"],
     ["/commit\nCommit and push the fix.", "commit-push"],
     ["$commit and push the fix.", "commit-push"],
     ["Push commit 5324b19 lên origin/main.", "push"],
@@ -37,6 +47,8 @@ test("mentions, negative requests, and existing commits do not imply a new commi
     "Commit button needs review.",
     "Commit đã xong.",
     "Review the commitment.",
+    "Review the Edit, Commit and Push buttons.",
+    "Review nút Edit, Commit và Push.",
     "Inspect src/commit.ts and push.ts.",
     "Push notifications need review.",
     "Push đã xong.",
@@ -45,16 +57,56 @@ test("mentions, negative requests, and existing commits do not imply a new commi
     assert.equal(gitAction(text), null, text);
 });
 
+test("button-list ordering never authorizes push", () => {
+  const names = ["Edit", "Send", "Push"];
+  for (const first of names)
+    for (const second of names.filter((name) => name !== first)) {
+      const third = names.find((name) => name !== first && name !== second)!;
+      for (const text of [
+        `Commit sửa nút ${first}, ${second} và ${third}.`,
+        `Commit updates to ${first}, ${second} and ${third}.`,
+        `Commit changes to ${first}, ${second}, and ${third} buttons.`,
+      ]) {
+        assert.equal(gitAction(text)?.kind, "commit", text);
+        assert.ok(gitAction(text)?.prompt.startsWith("/commit --no-push\n"), text);
+      }
+    }
+  assert.equal(gitAction("Commit sửa nút Edit và Push.")?.kind, "commit");
+});
+
 test("push mentions outside an explicit command do not turn a commit into a push", () => {
   for (const text of [
     "Commit the fix. Review commit and push behavior.",
     "Commit changes to commit and push buttons.",
     "Commit the push notification fix.",
+    "Commit sửa nút Edit, Push và Send.",
+    "Commit changes to Edit, Push, and Send buttons.",
   ]) {
     const action = gitAction(text)!;
     assert.equal(action.kind, "commit", text);
     assert.ok(action.prompt.startsWith("/commit --no-push\n"), text);
   }
+});
+
+test("excluding unrelated files preserves a positive commit request, not a blanket prohibition", () => {
+  for (const text of [
+    "Commit plugin changes. Không commit WIP khác.",
+    "Không commit WIP khác. Commit plugin changes.",
+    "Commit the fix. Do not commit unrelated files.",
+    "Commit the fix. Không commit thay đổi không liên quan.",
+    "/commit only the fix. Do not commit unrelated files.",
+  ]) {
+    assert.equal(gitAction(text)?.kind, "commit", text);
+    assert.ok(gitAction(text)?.prompt.startsWith("/commit --no-push"), text);
+  }
+  for (const text of [
+    "Không commit WIP khác.",
+    "Do not commit unrelated files.",
+    "Commit the fix. Không commit.",
+    "Commit the fix. Do not commit any changes.",
+    "Commit the fix. Do not commit unrelated files. Do not commit.",
+  ])
+    assert.equal(gitAction(text), null, text);
 });
 
 test("no-push constraints override positive push wording and skill defaults", () => {
@@ -67,6 +119,12 @@ test("no-push constraints override positive push wording and skill defaults", ()
     "Never push.",
     "Without pushing.",
     "--no-push",
+    "Do not commit unrelated files or push.",
+    "Do not commit unrelated files and push.",
+    "Không commit WIP khác hay push.",
+    "Không commit WIP khác hoặc push.",
+    "Không commit WIP khác và push.",
+    "Không được tự ý thực hiện push.",
   ]) {
     const text = `Commit and push the fix. ${suffix}`;
     const action = gitAction(text)!;
