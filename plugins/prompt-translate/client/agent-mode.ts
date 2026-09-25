@@ -32,20 +32,21 @@ export function composerModeKey(node: El): string | null {
   }
   return draft.key;
 }
-export function createAgentModes(client: Pick<PluginClientContext, "rpc">) {
+// Untouched new-thread drafts follow the host's configured mode; saved agents keep their own.
+export function createAgentModes(
+  client: Pick<PluginClientContext, "rpc">,
+  draftMode: () => Mode = () => "follow-agent",
+) {
   const values = new Map<string, Mode>();
   const loading = new Map<string, Promise<void>>();
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((fn) => fn());
   return {
     get(id: string) {
-      return values.get(id) ?? (id.startsWith("draft:") ? "follow-agent" : undefined);
+      return values.get(id) ?? (id.startsWith("draft:") ? draftMode() : undefined);
     },
     async load(id: string, refresh = false) {
-      if (id.startsWith("draft:")) {
-        if (!values.has(id)) values.set(id, "follow-agent");
-        return;
-      }
+      if (id.startsWith("draft:")) return;
       if (values.has(id) && !refresh) return;
       if (!loading.has(id))
         loading.set(
@@ -83,7 +84,7 @@ export function createAgentModes(client: Pick<PluginClientContext, "rpc">) {
     async ready(id: string) {
       await loading.get(id);
       await this.load(id, true);
-      return values.get(id)!;
+      return this.get(id)!;
     },
     subscribe(fn: () => void) {
       listeners.add(fn);

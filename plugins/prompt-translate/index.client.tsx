@@ -43,7 +43,7 @@ export default function contribute(client: PluginClientContext) {
     scope.document,
     scope.MutationObserver,
   );
-  const modes = createAgentModes(client);
+  const modes = createAgentModes(client, () => current.values.cavemanMode);
   const modeMenu = installComposerModeMenu(
     client,
     scope.document,

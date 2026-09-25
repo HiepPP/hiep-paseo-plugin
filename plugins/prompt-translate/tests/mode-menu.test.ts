@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { parseHTML } from "linkedom";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { installComposerModeMenu } from "../client/mode-menu";
-import { composerHost, createAgentModes } from "../client/agent-mode";
+import { composerHost, createAgentModes, type Mode } from "../client/agent-mode";
 import type { Doc, El } from "../client/dom";
 import { translateSettings } from "../shared/settings";
 
@@ -170,13 +170,25 @@ test("new-thread menu opens above clipped toolbar and saves draft mode locally",
       return { mode: "follow-agent" };
     },
   } as unknown as PluginClientContext;
-  const state = createAgentModes(client);
+  let configured: Mode = "follow-agent";
+  const state = createAgentModes(client, () => configured);
   const menu = installComposerModeMenu(client, document as unknown as Doc, undefined, state);
   try {
     assert.deepEqual(calls, []);
+    assert.equal(document.querySelector("[data-pt-label]")!.textContent, "Caveman: Default");
+    // Settings load after the composer mounts; an untouched draft follows them.
+    configured = "ultra";
+    menu.update();
+    assert.equal(document.querySelector("[data-pt-label]")!.textContent, "Caveman: Ultra");
     assert.equal(document.querySelector("[data-pt-trigger]")!.hasAttribute("disabled"), false);
     document.querySelector("[data-pt-trigger]")!.dispatchEvent(new window.Event("click"));
     assert.equal(shown, 1);
+    assert.equal(
+      document
+        .querySelector('[data-prompt-translate-option="ultra"]')!
+        .getAttribute("aria-selected"),
+      "true",
+    );
     const dropdown = document.querySelector<HTMLElement>("[data-pt-menu]")!;
     assert.equal(dropdown.style.position, "fixed");
     assert.equal(dropdown.style.left, "100px");

@@ -31,8 +31,9 @@ Learn English prompting from your own Vietnamese prompts, on Paseo desktop.
   commands override the dropdown for that turn. Model compliance is still probabilistic.
   Caveman shortens wording while preserving required response formats, endings, and next-step prompts.
 
-Choose Caveman mode in each conversation's composer. Each draft starts at Default; a new agent inherits its first-turn command and keeps
-its own selection. The legacy host-wide `cavemanMode` setting is ignored. Settings retain the
+Choose Caveman mode in each conversation's composer. New-thread drafts start at the host's
+**New-thread Caveman mode** setting (`cavemanMode`, default Default) until you pick another mode.
+A new agent inherits its first-turn command and keeps its own selection. Settings also hold the
 shared reply-language and Chinese-script preferences.
 
 ## Install native hooks

@@ -6,7 +6,7 @@ import type { Doc, DomEvent, El, Observer } from "./dom";
 type Mode = TranslateSettings["cavemanMode"];
 type Client = Pick<PluginClientContext, "rpc">;
 
-const modes: readonly { value: Mode; label: string }[] = [
+export const modes: readonly { value: Mode; label: string }[] = [
   { value: "follow-agent", label: "Default" },
   { value: "lite", label: "Lite" },
   { value: "full", label: "Full" },

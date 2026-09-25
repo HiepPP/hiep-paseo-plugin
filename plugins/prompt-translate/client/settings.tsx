@@ -10,11 +10,13 @@ import {
 } from "@getpaseo/plugin/client/ui";
 import { Text } from "react-native";
 import {
+  cavemanModeSchema,
   chineseScriptSchema,
   providerSchema,
   translateSettings,
   type TranslateSettings,
 } from "../shared/settings";
+import { modes } from "./mode-menu";
 import { current } from "./state";
 
 export function TranslateSettingsScreen({ theme }: PluginSurfaceProps) {
@@ -86,10 +88,16 @@ export function TranslateSettingsScreen({ theme }: PluginSurfaceProps) {
             disabled={settings.saving}
             onValueChange={(matchReplyLanguage) => void save({ ...values, matchReplyLanguage })}
           />
-          <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>
-            Choose Caveman mode in each conversation's composer. Modes are saved separately per
-            agent.
-          </Text>
+          <SettingsSelect
+            label="New-thread Caveman mode"
+            hint="New-thread composers start here. Each agent keeps the mode chosen in its composer."
+            value={values.cavemanMode}
+            options={modes.map(({ label, value }) => ({ label, value }))}
+            disabled={settings.saving}
+            onValueChange={(cavemanMode) =>
+              void save({ ...values, cavemanMode: cavemanModeSchema.parse(cavemanMode) })
+            }
+          />
           <SettingsSelect
             label="Chinese script"
             hint="For Wenyan modes; explicit requests in your draft take priority."
