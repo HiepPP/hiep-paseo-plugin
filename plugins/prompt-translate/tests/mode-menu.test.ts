@@ -81,10 +81,25 @@ test("reusing the composer across agents never leaks its previous mode", async (
   }
 });
 
-test("new-thread menu waits for a real agent UUID before loading modes", async () => {
+test("new-thread menu opens above clipped toolbar and saves draft mode locally", async () => {
   const { document, window } = parseHTML(
     '<html><head></head><body><div data-testid="message-input-root"><textarea></textarea><button data-testid="message-input-attach-button">+</button></div></body></html>',
   );
+  Object.assign(window, { innerHeight: 800, innerWidth: 1000 });
+  const createElement = document.createElement.bind(document);
+  let shown = 0;
+  document.createElement = ((tag: string) => {
+    const element = createElement(tag);
+    Object.assign(element, {
+      getBoundingClientRect: () => ({ left: 100, top: 700, bottom: 728 }),
+      showPopover() {
+        assert.equal(element.isConnected, true);
+        assert.equal(element.getAttribute("popover"), "manual");
+        shown++;
+      },
+    });
+    return element;
+  }) as typeof document.createElement;
   const props = { voiceAgentId: "new-workspace" };
   Object.assign(document.querySelector("textarea")!, {
     __reactFiber$test: { memoizedProps: props },
@@ -102,6 +117,11 @@ test("new-thread menu waits for a real agent UUID before loading modes", async (
     assert.deepEqual(calls, []);
     assert.equal(document.querySelector("[data-pt-trigger]")!.hasAttribute("disabled"), false);
     document.querySelector("[data-pt-trigger]")!.dispatchEvent(new window.Event("click"));
+    assert.equal(shown, 1);
+    const dropdown = document.querySelector<HTMLElement>("[data-pt-menu]")!;
+    assert.equal(dropdown.style.position, "fixed");
+    assert.equal(dropdown.style.left, "100px");
+    assert.equal(dropdown.style.bottom, "108px");
     document
       .querySelector('[data-prompt-translate-option="lite"]')!
       .dispatchEvent(new window.Event("click"));

@@ -124,6 +124,13 @@ export function installComposerModeMenu(
     menu.setAttribute("aria-label", "Caveman mode");
     const colors = surfaceColor(doc, wrapper);
     menu.style.cssText = `--pt-surface:${colors.surface};--pt-foreground:${colors.foreground};`;
+    // The draft toolbar clips overflow. A popover escapes it through the top layer.
+    const anchor = control.trigger.getBoundingClientRect?.();
+    const height = doc.defaultView?.innerHeight;
+    if (menu.showPopover && anchor && height) {
+      menu.setAttribute("popover", "manual");
+      menu.style.cssText += `;position:fixed;margin:0;left:${Math.max(8, Math.min(anchor.left, (doc.defaultView?.innerWidth ?? 1024) - 246))}px;top:auto;bottom:${height - anchor.top + 8}px;max-height:${Math.max(34, Math.min(310, anchor.top - 24))}px;`;
+    }
     for (const mode of modes) {
       const option = doc.createElement("button");
       option.setAttribute("type", "button");
@@ -153,6 +160,7 @@ export function installComposerModeMenu(
     }
     control.menu = menu;
     wrapper.append(menu);
+    if (menu.hasAttribute("popover")) menu.showPopover?.();
     control.trigger.setAttribute("aria-expanded", "true");
   }
 

@@ -23,6 +23,8 @@ export interface El {
   addEventListener(name: string, handler: (event: DomEvent) => void, capture?: boolean): void;
   removeEventListener(name: string, handler: (event: DomEvent) => void, capture?: boolean): void;
   focus?(): void;
+  showPopover?(): void;
+  getBoundingClientRect?(): { left: number; top: number; bottom: number };
   setSelectionRange?(start: number, end: number): void;
   dispatchEvent(event: object): boolean;
   click(): void;
@@ -52,6 +54,7 @@ export interface Doc {
   querySelectorAll(selector: string): ArrayLike<El>;
   defaultView: {
     innerWidth?: number;
+    innerHeight?: number;
     Event: new (type: string, init?: { bubbles?: boolean }) => object;
     KeyboardEvent?: new (
       type: string,
