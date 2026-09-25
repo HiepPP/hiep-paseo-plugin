@@ -24,6 +24,12 @@ test("explicit Git actions distinguish commit, commit and push, and push only", 
     ["Commit the button fixes, git push.", "commit-push"],
     ["Commit the button fixes and git push.", "commit-push"],
     ["Review the buttons, commit the fix.", "commit"],
+    ["Run button tests, commit.", "commit"],
+    ["Chạy test cho các nút, commit.", "commit"],
+    ["Commit the button fixes and push.", "commit-push"],
+    ["Do not edit, then commit the fix.", "commit"],
+    ["Do not edit, but commit the fix.", "commit"],
+    ["Do not commit, then push the existing commit.", "push"],
     ["/commit\nCommit and push the fix.", "commit-push"],
     ["$commit and push the fix.", "commit-push"],
     ["Push commit 5324b19 lên origin/main.", "push"],
@@ -49,6 +55,17 @@ test("mentions, negative requests, and existing commits do not imply a new commi
     "Review the commitment.",
     "Review the Edit, Commit and Push buttons.",
     "Review nút Edit, Commit và Push.",
+    "Review nút Commit, Push.",
+    "Review buttons named Commit, Push.",
+    "Review các nút có nhãn Commit, Push.",
+    "Review commit abc123. Không sửa code, commit hoặc push.",
+    "Review the change. Do not edit, commit or push.",
+    "Review the change. Don't edit, commit, or push.",
+    "Review the change. Never edit files, commit changes, or push them.",
+    "Do not edit unrelated files, commit changes, or push them.",
+    "Do not edit unrelated files, commit changes and push them.",
+    "Do not edit unrelated files, commit & push.",
+    "Không sửa WIP khác, commit hoặc push.",
     "Inspect src/commit.ts and push.ts.",
     "Push notifications need review.",
     "Push đã xong.",
@@ -81,6 +98,10 @@ test("push mentions outside an explicit command do not turn a commit into a push
     "Commit the push notification fix.",
     "Commit sửa nút Edit, Push và Send.",
     "Commit changes to Edit, Push, and Send buttons.",
+    "Commit changes to buttons named Commit and Push.",
+    "Commit changes to buttons called Commit, Push.",
+    "Commit sửa các nút có nhãn Commit, Push.",
+    "Commit sửa các nút:Commit, Push.",
   ]) {
     const action = gitAction(text)!;
     assert.equal(action.kind, "commit", text);
@@ -95,6 +116,9 @@ test("excluding unrelated files preserves a positive commit request, not a blank
     "Commit the fix. Do not commit unrelated files.",
     "Commit the fix. Không commit thay đổi không liên quan.",
     "/commit only the fix. Do not commit unrelated files.",
+    "Without changing unrelated files, commit the fix.",
+    "Do not edit unrelated files, commit the fix.",
+    "Không sửa WIP khác, commit bản sửa.",
   ]) {
     assert.equal(gitAction(text)?.kind, "commit", text);
     assert.ok(gitAction(text)?.prompt.startsWith("/commit --no-push"), text);
@@ -107,6 +131,23 @@ test("excluding unrelated files preserves a positive commit request, not a blank
     "Commit the fix. Do not commit unrelated files. Do not commit.",
   ])
     assert.equal(gitAction(text), null, text);
+});
+
+test("scoped edit restrictions preserve explicit push commands and later no-push constraints", () => {
+  for (const text of [
+    "Without changing unrelated files, commit and push the fix.",
+    "Không sửa WIP khác, commit bản sửa rồi push.",
+    "Commit changes to buttons named Commit and Push, then push.",
+  ])
+    assert.equal(gitAction(text)?.kind, "commit-push", text);
+  assert.equal(
+    gitAction("Without changing unrelated files, push the existing commit.")?.kind,
+    "push",
+  );
+  assert.equal(
+    gitAction("Without changing unrelated files, commit the fix. Do not push.")?.kind,
+    "commit",
+  );
 });
 
 test("no-push constraints override positive push wording and skill defaults", () => {
@@ -125,6 +166,7 @@ test("no-push constraints override positive push wording and skill defaults", ()
     "Không commit WIP khác hoặc push.",
     "Không commit WIP khác và push.",
     "Không được tự ý thực hiện push.",
+    "Do not edit, push.",
   ]) {
     const text = `Commit and push the fix. ${suffix}`;
     const action = gitAction(text)!;

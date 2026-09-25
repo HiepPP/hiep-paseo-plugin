@@ -21,15 +21,15 @@ export function gitAction(text: string): GitAction | null {
   const commandText = (part: string) =>
     part
       .trim()
-      .replace(/^(?:(?:please|hay|vui long|chi can|chi)\s+)+/, "")
+      .replace(/^(?:(?:please|hay|vui long|chi can|chi|but|nhung)\s+)+/, "")
       .replace(/^git\s+/, "")
       .replace(/^(?:create(?: a)?|tao(?: mot)?)\s+(?=commit\b)/, "");
   const labelList =
     /^(?:edit|send|commit|push)(?:\s*(?:and|va|&|\+)\s*(?:edit|send|commit|push))*(?:\s+(?:buttons?|controls?|labels?))?$/;
-  // Keep noun-list context across commas and conjunctions, while retaining commands with targets.
+  // Require actual label names; mentioning button tests/fixes must not hide a later Git command.
   const commands = clauses.flatMap((clause) => {
     const labels =
-      /\b(?:buttons?|controls?|labels?|nut)\b|\b(?:edit|send)(?=\s*(?:,|and\b|va\b|[&+]|$))/.test(
+      /\b(?:buttons?|controls?|labels?|nut)(?:\s+(?:named|called|labelled|labeled|co nhan))?(?:\s*:\s*|\s+)(?:edit|send|commit|push)\b|\b(?:edit|send)(?=\s*(?:,|and\b|va\b|[&+]|$))/.test(
         clause,
       );
     return clause
@@ -37,16 +37,35 @@ export function gitAction(text: string): GitAction | null {
       .filter((part) => !labels || !labelList.test(part.trim()))
       .map((part) => ({ text: commandText(part), labels }));
   });
+  // Commas continue a prohibition's list; an explicit transition starts a new instruction.
+  const denialText = normalized
+    .replace(/,[ \t]*(?:then|roi|sau do|but|nhung)\b/g, ". ")
+    // An unrelated-edit restriction can precede a targeted Git command, not a denial list.
+    .replace(
+      /(^|[.!?;\n,])[ \t]*((?:without\s+(?:changing|editing|modifying)|(?:do not|don['’]t|never)\s+(?:change|edit|modify)|(?:khong|dung)\s+(?:sua|chinh sua|thay doi))\s+(?:unrelated\s+(?:files|changes|work)|other\s+(?:files|changes)|wip\s+khac|(?:cac\s+)?(?:file|thay doi)\s+(?:khac|khong lien quan))),([^.!?;\n]*)/g,
+      (whole, boundary: string, restriction: string, rest: string) => {
+        const coordinated =
+          /\b(?:and|or|va|hoac|hay)\s+(?:git\s+)?(?:commit|push)\b|,\s*(?:and|or|va|hoac|hay)\b/.test(
+            rest,
+          );
+        if (!restriction.startsWith("without ") && coordinated) return whole;
+        const targeted = /^(?:git\s+)?(?:commit|push)\s+(?!(?:and|or|va|hoac|hay)\b|[&+])\S/.test(
+          rest.trim(),
+        );
+        return restriction.startsWith("without ") || targeted
+          ? `${boundary}${restriction}. ${rest}`
+          : whole;
+      },
+    );
   const denied = (verb: string, scopeException?: RegExp) =>
     [
-      ...normalized.matchAll(
+      ...denialText.matchAll(
         new RegExp(
-          // A negation governs coordinated verbs too: "do not commit unrelated files or push".
-          `\\b(?:do not|don['’]t|never|not|no|without|avoid|skip|khong|chua|dung|cam)(?:[ \\t]+\\w+)*?[ \\t]+${verb}\\b`,
+          `\\b(?:do not|don['’]t|never|not|no|without|avoid|skip|khong|chua|dung|cam)(?:[ \\t,]+\\w+)*?[ \\t,]+${verb}\\b`,
           "g",
         ),
       ),
-    ].some((match) => !scopeException?.test(normalized.slice(match.index! + match[0].length)));
+    ].some((match) => !scopeException?.test(denialText.slice(match.index! + match[0].length)));
   const isCommit = (command: string) =>
     /^commit(?=[:\s]|$)(?!\s+(?:messages?|buttons?|hash|sha|history|status|diff|log|is|was|has|da|already|done|completed)\b)/.test(
       command,

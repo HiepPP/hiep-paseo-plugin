@@ -148,7 +148,11 @@ test("Commit does not duplicate an existing skill and uncertain sends cannot ret
   assert.equal(f.sent.length, 1);
 });
 test("commit and push uses the skill; pushing an existing commit preserves the plain prompt", async () => {
-  for (const text of ["Commit and push only the fix.", "Push commit abc123 to origin/main."]) {
+  for (const text of [
+    "Commit and push only the fix.",
+    "Commit the button fixes and push.",
+    "Push commit abc123 to origin/main.",
+  ]) {
     const f = fixture();
     f.current.rows[1].text = `## Next Steps\n\`\`\`\nprompt: ${text}\n\`\`\``;
     const { key } = (await f.engine.inspect(scope)).candidates[0];
@@ -160,6 +164,41 @@ test("commit and push uses the skill; pushing an existing commit preserves the p
         : text,
     );
   }
+});
+test("review constraints across commas never inject the commit skill, manually or automatically", async () => {
+  for (const text of [
+    "Review commit abc123. Không sửa code, commit hoặc push.",
+    "Review the change. Do not edit, commit or push.",
+    "Review buttons named Commit, Push.",
+    "Review các nút có nhãn Commit, Push.",
+    "Do not edit unrelated files, commit changes, or push them.",
+    "Không sửa WIP khác, commit hoặc push.",
+  ])
+    for (const automatic of [false, true]) {
+      let evaluations = 0;
+      const f = fixture(async () => {
+        evaluations++;
+        return true;
+      });
+      f.current.rows[1].text = `## Next Steps\n\`\`\`\nprompt: ${text}\n\`\`\``;
+      try {
+        if (automatic) {
+          await f.engine.toggle(scope, true);
+          f.engine.started(scope.agentId);
+          await f.engine.ended(scope, true);
+        } else {
+          const { key } = (await f.engine.inspect(scope)).candidates[0];
+          await f.engine.send(scope, key);
+        }
+        assert.equal(evaluations, automatic ? 1 : 0);
+        assert.deepEqual(
+          f.sent.map(({ text }) => text),
+          [text],
+        );
+      } finally {
+        f.engine.close();
+      }
+    }
 });
 test("Git actions require a manual click without consuming a Jev evaluation", async () => {
   let evaluations = 0;
@@ -181,6 +220,12 @@ for (const [name, text] of [
   ["Push last in button list", "Commit sửa nút Edit, Send và Push."],
   ["command after comma", "Kiểm tra diff, commit phần sửa lỗi."],
   ["coordinated negation", "Commit và push bản sửa. Không commit WIP khác hay push."],
+  ["command after button tests", "Run button tests, commit."],
+  ["command after Vietnamese button tests", "Chạy test cho các nút, commit."],
+  ["English named buttons", "Commit changes to buttons named Commit and Push."],
+  ["Vietnamese named buttons", "Commit sửa các nút có nhãn Commit, Push."],
+  ["English scoped edit restriction", "Without changing unrelated files, commit the fix."],
+  ["Vietnamese scoped edit restriction", "Không sửa WIP khác, commit bản sửa."],
 ]) {
   test(`Git regression: ${name} keeps no-push payload and requires individual manual send`, async () => {
     let evaluations = 0;
