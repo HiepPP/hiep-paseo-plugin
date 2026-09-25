@@ -131,3 +131,13 @@ test("editing a queue item cancels only its snapshot, including identical prompt
   await modes.bindQueue(A, second.token, "already-consumed");
   assert.deepEqual(await readdir(path.join(root, "agents", A, "pending")), []);
 });
+
+test("first-turn command bootstraps isolated mode for later hidden turns", async () => {
+  const { modes, env } = await fixture();
+  assert.deepEqual(run({ prompt: "hello" }, env), {});
+  const first = run({ prompt: "$caveman wenyan-ultra\n\nhello" }, env);
+  assert.match(first.hookSpecificOutput.additionalContext, /wenyan-ultra/);
+  assert.equal((await modes.get(A)).mode, "wenyan-ultra");
+  assert.equal((await modes.get(B)).mode, "follow-agent");
+  assert.match(run({ prompt: "next" }, env).hookSpecificOutput.additionalContext, /wenyan-ultra/);
+});

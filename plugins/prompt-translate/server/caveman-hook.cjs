@@ -24,9 +24,15 @@ function run(data, env = process.env) {
     "plugin-data/prompt-translate",
   );
   const dir = path.join(root, "agents", agentId);
-  if (!fs.existsSync(path.join(dir, "mode.json"))) return {};
+  const modeFile = path.join(dir, "mode.json");
+  const initial = !fs.existsSync(modeFile);
+  // A new composer has no agent UUID yet. Its explicit first-turn command bootstraps
+  // isolated state; later turns use the usual hidden context and mode RPCs.
+  if (initial && !/^[/$]caveman(?::caveman)?(?:\s|$)/i.test(data.prompt)) return {};
   const runtime = JSON.parse(fs.readFileSync(path.join(root, "hook-runtime.json"), "utf8"));
-  const selected = JSON.parse(fs.readFileSync(path.join(dir, "mode.json"), "utf8"));
+  const selected = initial
+    ? { mode: "follow-agent" }
+    : JSON.parse(fs.readFileSync(modeFile, "utf8"));
   const hash = digest(data.prompt);
   let choice = selected;
   let consumed;
@@ -61,6 +67,13 @@ function run(data, env = process.env) {
   const change = parseModeChange(userPrompt, {
     getDefaultMode: () => config.getDefaultMode(data.cwd),
   });
+  if (initial) {
+    const firstMode =
+      change?.action === "set" && modes.has(change.mode) ? change.mode : "follow-agent";
+    selected.mode = firstMode;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(modeFile, JSON.stringify(selected), { mode: 0o600 });
+  }
   const requested = choice.mode === "follow-agent" ? "off" : choice.mode;
   const hookPrompt = change ? userPrompt : `/caveman ${requested}`;
   const nativeDir = path.join(dir, "native");

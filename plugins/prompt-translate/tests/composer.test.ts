@@ -471,7 +471,7 @@ test("new-thread draft sends unchanged without calling agent mode RPCs", async (
       enhance: async (text) => text,
       mode: async () => {
         modeCalls++;
-        throw new Error("Invalid UUID");
+        return "follow-agent";
       },
     },
     { enabled: () => true, settings: () => follow },
@@ -481,9 +481,91 @@ test("new-thread draft sends unchanged without calling agent mode RPCs", async (
   try {
     composer.onKeydown(key(field, { metaKey: false }).event);
     await settle();
-    assert.equal(modeCalls, 0);
+    assert.equal(modeCalls, 2);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].value, "first prompt");
+  } finally {
+    composer.stop();
+  }
+});
+
+for (const [mode, original, expected] of [
+  ["lite", "hello", "$caveman lite\n\nhello"],
+  ["wenyan-ultra", "$caveman off\n\nhello", "$caveman off\n\nhello"],
+] as const)
+  test(`draft first send: ${mode} respects explicit commands`, async () => {
+    const { doc, field, sent } = page(original);
+    Object.assign(field, {
+      __reactFiber$test: { memoizedProps: { voiceAgentId: "new-workspace" } },
+    });
+    let snapshots = 0;
+    const composer = installComposer(
+      {
+        ...hookApi,
+        enhance: async (t) => t,
+        mode: async () => mode,
+        prepare: async () => {
+          snapshots++;
+          return { token: "bad" };
+        },
+      },
+      { enabled: () => true, settings: () => follow },
+      doc,
+      fast,
+    );
+    try {
+      composer.onKeydown(key(field, { metaKey: false }).event);
+      await wait(10);
+      assert.equal(sent[0]?.value, expected);
+      assert.equal(snapshots, 0);
+    } finally {
+      composer.stop();
+    }
+  });
+
+test("unsent first turn replaces its generated command when selection changes", async () => {
+  const { doc, field, sent } = page("hello");
+  Object.assign(field, { __reactFiber$test: { memoizedProps: { voiceAgentId: "new-workspace" } } });
+  let mode: typeof selected = "lite";
+  const composer = installComposer(
+    { ...hookApi, enhance: async (t) => t, mode: async () => mode },
+    { enabled: () => true, settings: () => follow },
+    doc,
+    fast,
+  );
+  try {
+    composer.onKeydown(key(field, { metaKey: false }).event);
+    await wait(10);
+    mode = "wenyan-ultra";
+    composer.onKeydown(key(field, { metaKey: false }).event);
+    await wait(10);
+    assert.equal(sent[1]?.value, "$caveman wenyan-ultra\n\nhello");
+    mode = "follow-agent";
+    composer.onKeydown(key(field, { metaKey: false }).event);
+    await wait(10);
+    assert.equal(sent[2]?.value, "hello");
+  } finally {
+    composer.stop();
+  }
+});
+
+test("new-thread enhancement uses the mode selected while enhancement runs", async () => {
+  const { doc, field, sent } = page("hello");
+  Object.assign(field, { __reactFiber$test: { memoizedProps: { voiceAgentId: "new-workspace" } } });
+  const result = deferred();
+  let mode: typeof selected = "lite";
+  const composer = installComposer(
+    { ...hookApi, enhance: () => result.promise, mode: async () => mode },
+    { enabled: () => true, settings: () => follow },
+    doc,
+    fast,
+  );
+  try {
+    composer.onKeydown(key(field).event);
+    mode = "wenyan-ultra";
+    result.resolve("enhanced");
+    await wait(15);
+    assert.equal(sent[0]?.value, "$caveman wenyan-ultra\n\nenhanced");
   } finally {
     composer.stop();
   }

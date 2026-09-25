@@ -12,6 +12,21 @@ export function composerAgent(node: El): string | null {
   const id = agentIdSchema.safeParse(props?.voiceAgentId);
   return id.success ? id.data : null;
 }
+const drafts = new WeakMap<El, { raw: string; key: string }>();
+let draftSequence = 0;
+export function composerModeKey(node: El): string | null {
+  const field = node.querySelector("[data-composer-input], textarea") ?? node;
+  const agent = composerAgent(field);
+  if (agent) return agent;
+  const props = reactProps(field, (value) => typeof value.voiceAgentId === "string");
+  if (typeof props?.voiceAgentId !== "string") return null;
+  let draft = drafts.get(field);
+  if (!draft || draft.raw !== props.voiceAgentId) {
+    draft = { raw: props.voiceAgentId, key: `draft:${++draftSequence}` };
+    drafts.set(field, draft);
+  }
+  return draft.key;
+}
 export function createAgentModes(client: Pick<PluginClientContext, "rpc">) {
   const values = new Map<string, Mode>();
   const loading = new Map<string, Promise<void>>();
@@ -19,24 +34,35 @@ export function createAgentModes(client: Pick<PluginClientContext, "rpc">) {
   const notify = () => listeners.forEach((fn) => fn());
   return {
     get(id: string) {
-      return values.get(id);
+      return values.get(id) ?? (id.startsWith("draft:") ? "follow-agent" : undefined);
     },
-    async load(id: string) {
-      if (values.has(id)) return;
+    async load(id: string, refresh = false) {
+      if (id.startsWith("draft:")) {
+        if (!values.has(id)) values.set(id, "follow-agent");
+        return;
+      }
+      if (values.has(id) && !refresh) return;
       if (!loading.has(id))
         loading.set(
           id,
           client
             .rpc(modeReadRpc, { agentId: id })
             .then(({ mode }) => {
-              values.set(id, mode);
-              notify();
+              if (values.get(id) !== mode) {
+                values.set(id, mode);
+                notify();
+              }
             })
             .finally(() => loading.delete(id)),
         );
       await loading.get(id);
     },
     async set(id: string, mode: Mode) {
+      if (id.startsWith("draft:")) {
+        values.set(id, mode);
+        notify();
+        return;
+      }
       // Update after persistence: a send during saving must await this operation.
       const task = client.rpc(modeWriteRpc, { agentId: id, mode }).then(() => {
         values.set(id, mode);
@@ -51,7 +77,7 @@ export function createAgentModes(client: Pick<PluginClientContext, "rpc">) {
     },
     async ready(id: string) {
       await loading.get(id);
-      await this.load(id);
+      await this.load(id, true);
       return values.get(id)!;
     },
     subscribe(fn: () => void) {

@@ -19,13 +19,16 @@ Learn English prompting from your own Vietnamese prompts, on Paseo desktop.
   current request's language. The stored `follow-agent` value is retained for compatibility.
   Explicit `/caveman` or `$caveman` commands in the draft take priority over the dropdown.
 - Mode instructions use native `UserPromptSubmit` **hidden context**. The plugin never inserts
-  mode commands or a response-mode block into the sent prompt. Enhancement changes only the
+  mode commands or a response-mode block into existing agents' prompts.
+  New-thread composers keep their selection locally: the first send prepends `$caveman <mode>`
+  for a non-Default selection unless the draft already contains an explicit Caveman command.
+  The native hook initializes that agent's mode from the command; subsequent sends use hidden context. Enhancement changes only the
   prompt content; reply-language preferences also travel through the hook.
 - The hook calls the installed Caveman parser and mode tracker, including its mode-specific
   ruleset and reminders. State is isolated per Paseo agent and native session. Explicit user
   commands override the dropdown for that turn. Model compliance is still probabilistic.
 
-Choose Caveman mode in each conversation's composer. Each agent starts at Default and keeps
+Choose Caveman mode in each conversation's composer. Each draft starts at Default; a new agent inherits its first-turn command and keeps
 its own selection. The legacy host-wide `cavemanMode` setting is ignored. Settings retain the
 shared reply-language and Chinese-script preferences.
 

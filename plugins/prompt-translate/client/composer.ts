@@ -1,5 +1,6 @@
 import { reactProps, type Doc, type El, type Key } from "./dom";
-import { composerAgent, type Mode } from "./agent-mode";
+import { composerAgent, composerModeKey, type Mode } from "./agent-mode";
+import { preserveCavemanCommand } from "../shared/caveman";
 import type { TranslateSettings } from "../shared/settings";
 import type { DomEvent } from "./dom";
 
@@ -63,6 +64,7 @@ export function installComposer(
   // send: let React adopt the new text before Enter; verify: when an unsent prompt means failure.
   timing = { send: 50, verify: 1_500 },
 ) {
+  const firstTurnText = new WeakMap<El, { prompt: string; original: string }>();
   const queueBindings = new Map<string, Promise<unknown>>();
   let editingQueue = false;
   let replayingQueueEdit = false;
@@ -105,11 +107,57 @@ export function installComposer(
     const agentId = composerAgent(field);
     if (!draft.trim() || pending || editingQueue) return;
     if (!agentId) {
-      syntheticSend = field;
+      const key = composerModeKey(field);
+      const request = { field, draft };
+      pending = request;
       try {
-        replay();
+        const mode = key ? await api.mode(key) : "follow-agent";
+        if (
+          pending !== request ||
+          !field.isConnected ||
+          field.value !== draft ||
+          composerModeKey(field) !== key
+        )
+          return;
+        const previous = firstTurnText.get(field);
+        const original = previous?.prompt === draft ? previous.original : draft;
+        const explicit = preserveCavemanCommand("", original);
+        const prompt =
+          explicit || mode === "follow-agent" ? original : `$caveman ${mode}\n\n${original}`;
+        firstTurnText.set(field, { prompt, original });
+        if (prompt !== draft) {
+          if (!fillField(field, prompt, doc)) return;
+          await new Promise<void>((resolve) => setTimeout(resolve, timing.send));
+        }
+        if (
+          pending !== request ||
+          !field.isConnected ||
+          field.value !== prompt ||
+          composerModeKey(field) !== key
+        )
+          return;
+        if (key && (await api.mode(key)) !== mode) {
+          fillField(field, original, doc);
+          pending = null;
+          return prepareSend(field, source, replay);
+        }
+        if (
+          pending !== request ||
+          !field.isConnected ||
+          field.value !== prompt ||
+          composerModeKey(field) !== key
+        )
+          return;
+        syntheticSend = field;
+        try {
+          replay();
+        } finally {
+          syntheticSend = null;
+        }
+      } catch (error) {
+        say(`Caveman: ${String(error)}`, 4000);
       } finally {
-        syntheticSend = null;
+        if (pending === request) pending = null;
       }
       return;
     }
@@ -170,9 +218,9 @@ export function installComposer(
     }
   }
   function send(field: El, prompt: string, source: string) {
-    const agentId = composerAgent(field);
+    const agentId = composerModeKey(field);
     later(timing.send, () => {
-      if (field.isConnected && field.value === prompt && composerAgent(field) === agentId)
+      if (field.isConnected && field.value === prompt && composerModeKey(field) === agentId)
         void prepareSend(field, source, () => {
           if (!pressEnter(field, doc)) say(UNSENT, 4000);
         });
@@ -230,14 +278,14 @@ export function installComposer(
     event.stopImmediatePropagation();
     const draft = field.value ?? "";
     if (pending || !draft.trim()) return;
-    const request = { field, draft, agentId: composerAgent(field) };
+    const request = { field, draft, agentId: composerModeKey(field) };
     pending = request;
     say("Enhancing… (Esc để hủy)");
     api.enhance(draft).then(
       (prompt) => {
         if (pending !== request) return;
         pending = null;
-        if (!field.isConnected || composerAgent(field) !== request.agentId) return say(null);
+        if (!field.isConnected || composerModeKey(field) !== request.agentId) return say(null);
         if (field.value !== draft) return say("Bản nháp đã đổi, bỏ qua kết quả enhance", 4000);
         if (!fillField(field, prompt, doc)) return say("Composer không nhận text đã enhance", 4000);
         say(null);

@@ -82,7 +82,7 @@ test("reusing the composer across agents never leaks its previous mode", async (
 });
 
 test("new-thread menu waits for a real agent UUID before loading modes", async () => {
-  const { document } = parseHTML(
+  const { document, window } = parseHTML(
     '<html><head></head><body><div data-testid="message-input-root"><textarea></textarea><button data-testid="message-input-attach-button">+</button></div></body></html>',
   );
   const props = { voiceAgentId: "new-workspace" };
@@ -100,12 +100,19 @@ test("new-thread menu waits for a real agent UUID before loading modes", async (
   const menu = installComposerModeMenu(client, document as unknown as Doc, undefined, state);
   try {
     assert.deepEqual(calls, []);
-    assert.ok(document.querySelector("[data-pt-trigger]")!.hasAttribute("disabled"));
+    assert.equal(document.querySelector("[data-pt-trigger]")!.hasAttribute("disabled"), false);
+    document.querySelector("[data-pt-trigger]")!.dispatchEvent(new window.Event("click"));
+    document
+      .querySelector('[data-prompt-translate-option="lite"]')!
+      .dispatchEvent(new window.Event("click"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(document.querySelector("[data-pt-label]")!.textContent, "Caveman: Lite");
+    assert.deepEqual(calls, []);
     props.voiceAgentId = "00000000-0000-4000-8000-000000000003";
     menu.scan();
     await state.ready(props.voiceAgentId);
     menu.update();
-    assert.deepEqual(calls, [props.voiceAgentId]);
+    assert.deepEqual(calls, [props.voiceAgentId, props.voiceAgentId]);
     assert.equal(document.querySelector("[data-pt-trigger]")!.hasAttribute("disabled"), false);
   } finally {
     menu.stop();

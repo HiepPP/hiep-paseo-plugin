@@ -1,4 +1,4 @@
-import { composerAgent, type AgentModeState } from "./agent-mode";
+import { composerModeKey, type AgentModeState } from "./agent-mode";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { type TranslateSettings } from "../shared/settings";
 import type { Doc, DomEvent, El, Observer } from "./dom";
@@ -89,7 +89,7 @@ export function installComposerModeMenu(
     if (saving) return;
     saving = true;
     trigger.setAttribute("aria-busy", "true");
-    const id = composerAgent(trigger.closest(ROOT)!);
+    const id = composerModeKey(trigger.closest(ROOT)!);
     try {
       if (!id) throw new Error("Open an agent conversation first");
       await state.set(id, mode);
@@ -107,7 +107,7 @@ export function installComposerModeMenu(
     const control = controls.get(wrapper);
     if (!control || control.menu) return;
     for (const other of controls.keys()) close(other);
-    const id = composerAgent(wrapper.closest(ROOT)!);
+    const id = composerModeKey(wrapper.closest(ROOT)!);
     if (!id || state.get(id) === undefined) return;
     const selectedMode = state.get(id);
     const menu = doc.createElement("div");
@@ -149,7 +149,7 @@ export function installComposerModeMenu(
     if (stopped) return;
     for (const wrapper of controls.keys()) if (!wrapper.isConnected) controls.delete(wrapper);
     for (const root of Array.from(doc.querySelectorAll(ROOT))) {
-      const id = composerAgent(root);
+      const id = composerModeKey(root);
       if (id) void state.load(id).catch(() => undefined);
       if (root.querySelector(`[${CONTROL}]`)) continue;
       const attach = root.querySelector(ATTACH);
@@ -229,7 +229,7 @@ export function installComposerModeMenu(
           control.trigger.setAttribute("data-pt-typography", css);
         }
       }
-      const id = root && composerAgent(root);
+      const id = root && composerModeKey(root);
       const mode = id ? state.get(id) : undefined;
       const text = `Caveman: ${mode ? label(mode) : id ? "Loading…" : "Default"}`;
       if (control.label.textContent !== text) {
@@ -241,6 +241,15 @@ export function installComposerModeMenu(
     }
   }
   const unsubscribe = state.subscribe(update);
+  // The first native hook can initialize the agent after its composer mounts.
+  const refresh = setInterval(() => {
+    for (const wrapper of controls.keys()) {
+      if (!wrapper.isConnected) continue;
+      const root = wrapper.closest(ROOT);
+      const id = root && composerModeKey(root);
+      if (id && !id.startsWith("draft:")) void state.load(id, true).catch(() => undefined);
+    }
+  }, 2000);
   function outside(event: DomEvent) {
     const target = event.target as El | null;
     for (const wrapper of controls.keys()) if (!wrapper.contains(target)) close(wrapper);
@@ -271,6 +280,7 @@ export function installComposerModeMenu(
     stop() {
       stopped = true;
       unsubscribe();
+      clearInterval(refresh);
       observer?.disconnect();
       clearTimeout(timer);
       doc.body.removeEventListener("pointerdown", outside, true);
