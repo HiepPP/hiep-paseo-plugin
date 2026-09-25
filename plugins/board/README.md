@@ -46,6 +46,7 @@ Supports Paseo daemon and client 0.8.x and 0.9.0-beta.2. Uses standard plugin su
 ## Sidebar
 
 On macOS desktop, Cmd+D opens Board, including from the chat composer. The listener is removed when Board stops.
+Cmd+D and Back to Board after send use the Board sidebar action to retain the conversation's host when multiple hosts are connected.
 Clear the conflicting Start/stop dictation shortcut in Paseo Settings → Shortcuts; this was done on the current client.
 The microphone button remains available. Browser and mobile clients use the Board menu.
 

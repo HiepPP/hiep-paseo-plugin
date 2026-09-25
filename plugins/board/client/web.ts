@@ -33,6 +33,16 @@ declare const history: { pushState(state: unknown, title: string, url: string): 
 declare const PopStateEvent: new (type: string) => unknown;
 declare function dispatchEvent(event: unknown): void;
 
+// Each connected host registers shortcuts. Let Paseo's sidebar choose the active/remembered
+// host instead of opening whichever installation happened to register its listener first.
+export function openBoardFromSidebar(): boolean {
+  if (Platform.OS !== "web" || typeof document === "undefined") return false;
+  const button = document.querySelector('[data-testid="plugin-sidebar-board-board"]');
+  if (!button) return false;
+  button.click();
+  return true;
+}
+
 /**
  * Mirrors the sidebar project "+" button: click it when rendered, otherwise push the same
  * `/new?...` route the app builds for it. Returns false when neither is possible.

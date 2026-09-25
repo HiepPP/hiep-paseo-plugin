@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import { installNewThreadNavigation } from "./client/new-thread";
 import { installParentNavigation } from "./client/parent";
 import { installRemoveButtons } from "./client/remove";
-import { installRemovePlacement } from "./client/web";
+import { installRemovePlacement, openBoardFromSidebar } from "./client/web";
 import { BoardPage } from "./client/page";
 import { OrbSettingsScreen } from "./client/orb-settings";
 import { installBoardEvents } from "./client/events";
@@ -23,7 +23,9 @@ export default function contribute(client: PluginClientContext) {
     icon: "Sparkles",
     Component: OrbSettingsScreen,
   });
-  const openBoard = () => client.openSurface("board");
+  const openBoard = () => {
+    if (!openBoardFromSidebar()) client.openSurface("board");
+  };
   const shortcut = installBoardShortcut(openBoard);
   const events = installBoardEvents(openBoard);
   const removePlacement = installRemovePlacement();
