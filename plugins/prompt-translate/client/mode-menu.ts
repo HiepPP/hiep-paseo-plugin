@@ -17,6 +17,7 @@ const modes: readonly { value: Mode; label: string }[] = [
 ];
 const ROOT = '[data-testid="message-input-root"]';
 const ATTACH = '[data-testid="message-input-attach-button"]';
+const MODEL = '[data-testid="combined-model-selector"]';
 const CONTROL = "data-prompt-translate-mode";
 const OPTION = "data-prompt-translate-option";
 
@@ -42,8 +43,10 @@ const styles = `
   width:100%; min-height:34px; padding:6px 10px; border:0; border-radius:7px;
   background:transparent; color:inherit; font:inherit; font-size:14px; text-align:left;
   cursor:pointer; }
-[${CONTROL}] [${OPTION}]:hover, [${CONTROL}] [${OPTION}]:focus-visible {
-  background:color-mix(in srgb,currentColor 9%,transparent); outline:none; }
+[${CONTROL}] [${OPTION}]:hover { background:color-mix(in srgb,currentColor 9%,transparent); }
+[${CONTROL}] [${OPTION}]:focus, [${CONTROL}] [${OPTION}][data-pt-active] {
+  background:color-mix(in srgb,currentColor 14%,transparent);
+  outline:2px solid currentColor; outline-offset:-2px; }
 [${CONTROL}] [data-pt-check] { margin-left:14px; font-size:15px; }
 `;
 
@@ -110,6 +113,11 @@ export function installComposerModeMenu(
     const id = composerModeKey(wrapper.closest(ROOT)!);
     if (!id || state.get(id) === undefined) return;
     const selectedMode = state.get(id);
+    const choose = (mode: Mode) => {
+      close(wrapper);
+      control.trigger.focus?.();
+      void save(mode, control.trigger);
+    };
     const menu = doc.createElement("div");
     menu.setAttribute("data-pt-menu", "");
     menu.setAttribute("role", "listbox");
@@ -132,16 +140,33 @@ export function installComposerModeMenu(
         check.textContent = "✓";
         option.append(check);
       }
-      option.addEventListener("click", () => {
-        close(wrapper);
-        control.trigger.focus?.();
-        void save(mode.value, control.trigger);
+      option.setAttribute("tabindex", "-1");
+      option.addEventListener("click", () => choose(mode.value));
+      option.addEventListener("focus", () => {
+        for (const other of Array.from(menu.querySelectorAll(`[${OPTION}]`)))
+          other.removeAttribute("data-pt-active");
+        option.setAttribute("data-pt-active", "");
+        menu.setAttribute("aria-activedescendant", option.getAttribute("id") ?? "");
       });
+      option.setAttribute("id", `pt-option-${mode.value}`);
       menu.append(option);
     }
     control.menu = menu;
     wrapper.append(menu);
     control.trigger.setAttribute("aria-expanded", "true");
+  }
+
+  // Outermost node wrapping only the model selector, so the menu sits beside it
+  // rather than inside its fixed-width viewport.
+  function modelSlot(root: El) {
+    let slot = root.querySelector(MODEL);
+    while (
+      slot?.parentElement &&
+      slot.parentElement !== root &&
+      slot.parentElement.childElementCount === 1
+    )
+      slot = slot.parentElement;
+    return slot;
   }
 
   function scan() {
@@ -151,14 +176,20 @@ export function installComposerModeMenu(
     for (const root of Array.from(doc.querySelectorAll(ROOT))) {
       const id = composerModeKey(root);
       if (id) void state.load(id).catch(() => undefined);
-      if (root.querySelector(`[${CONTROL}]`)) continue;
+      const slot = modelSlot(root);
+      const existing = root.querySelector(`[${CONTROL}]`);
+      if (existing) {
+        // React can mount or reorder toolbar children after the menu is inserted.
+        if (slot && existing.nextElementSibling !== slot) slot.before(existing);
+        continue;
+      }
       const attach = root.querySelector(ATTACH);
       const agentControl = root.querySelector(
         '[data-testid="agent-provider-selector"], [data-testid="mode-control"]',
       );
       let group = attach?.parentElement;
       while (group && agentControl && !group.contains(agentControl)) group = group.parentElement;
-      if (!group) continue;
+      if (!group && !slot) continue;
       const wrapper = doc.createElement("div");
       wrapper.setAttribute(CONTROL, "");
       const trigger = doc.createElement("button");
@@ -178,37 +209,77 @@ export function installComposerModeMenu(
         if (controls.get(wrapper)?.menu) close(wrapper);
         else open(wrapper);
       });
+      const focusOption = (index: number) => {
+        const options = Array.from(wrapper.querySelectorAll(`[${OPTION}]`));
+        if (!options.length) return;
+        options[((index % options.length) + options.length) % options.length]?.focus?.();
+      };
+      const focusedIndex = (target: unknown) => {
+        const options = Array.from(wrapper.querySelectorAll(`[${OPTION}]`));
+        const option = (target as El | null)?.closest?.(`[${OPTION}]`) ?? null;
+        return option ? options.indexOf(option) : -1;
+      };
+      const selectedIndex = () =>
+        Array.from(wrapper.querySelectorAll(`[${OPTION}]`)).findIndex(
+          (option) => option.getAttribute("aria-selected") === "true",
+        );
       wrapper.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-          if (!controls.get(wrapper)?.menu) return;
+        const isOpen = Boolean(controls.get(wrapper)?.menu);
+        const index = focusedIndex(event.target);
+        const onOption = index >= 0;
+        const key = event.key;
+        const stop = () => {
           event.preventDefault();
           event.stopPropagation();
+        };
+        if (key === "Escape") {
+          if (!isOpen) return;
+          stop();
           close(wrapper);
           trigger.focus?.();
-        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!controls.get(wrapper)?.menu) open(wrapper);
-          const options = Array.from(wrapper.querySelectorAll(`[${OPTION}]`));
-          const selected = (event.target as El | null)?.closest?.(`[${OPTION}]`);
-          const index = options.indexOf(selected as El);
-          const next =
-            event.key === "ArrowDown"
-              ? (index + 1) % options.length
-              : index < 0
-                ? options.length - 1
-                : (index - 1 + options.length) % options.length;
-          options[next]?.focus?.();
+        } else if (key === "Tab") {
+          if (isOpen) close(wrapper);
+        } else if (key === "ArrowDown" || key === "ArrowUp") {
+          stop();
+          if (!isOpen) {
+            open(wrapper);
+            const selected = selectedIndex();
+            focusOption(selected >= 0 ? selected : key === "ArrowDown" ? 0 : -1);
+            return;
+          }
+          if (!onOption) {
+            const selected = selectedIndex();
+            focusOption(selected >= 0 ? selected : key === "ArrowDown" ? 0 : -1);
+          } else focusOption(key === "ArrowDown" ? index + 1 : index - 1);
+        } else if (key === "Home" || key === "End") {
+          if (!isOpen) return;
+          stop();
+          focusOption(key === "Home" ? 0 : -1);
+        } else if (key === "Enter" || key === " ") {
+          if (onOption) {
+            stop();
+            const option = (event.target as El).closest(`[${OPTION}]`)!;
+            const mode = option.getAttribute(OPTION) as Mode;
+            close(wrapper);
+            trigger.focus?.();
+            void save(mode, trigger);
+          } else if (!isOpen && trigger.getAttribute("disabled") === null) {
+            stop();
+            open(wrapper);
+            const selected = selectedIndex();
+            focusOption(selected >= 0 ? selected : 0);
+          }
         }
       });
       wrapper.append(trigger);
       controls.set(wrapper, { trigger, label: name, menu: null });
-      if (attach && agentControl) {
+      if (slot) slot.before(wrapper);
+      else if (attach && agentControl && group) {
         let anchor = attach;
         while (anchor.parentElement && anchor.parentElement !== group)
           anchor = anchor.parentElement;
         anchor.after(wrapper);
-      } else group.append(wrapper);
+      } else group?.append(wrapper);
     }
   }
 

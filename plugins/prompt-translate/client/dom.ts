@@ -4,6 +4,7 @@ export interface El {
   isConnected: boolean;
   parentElement: El | null;
   nextElementSibling: El | null;
+  childElementCount: number;
   value?: string;
   selected?: boolean;
   style: { cssText: string };
@@ -17,6 +18,7 @@ export interface El {
   contains(node: El | null): boolean;
   append(...nodes: (El | string)[]): void;
   after(...nodes: El[]): void;
+  before(...nodes: El[]): void;
   remove(): void;
   addEventListener(name: string, handler: (event: DomEvent) => void, capture?: boolean): void;
   removeEventListener(name: string, handler: (event: DomEvent) => void, capture?: boolean): void;
