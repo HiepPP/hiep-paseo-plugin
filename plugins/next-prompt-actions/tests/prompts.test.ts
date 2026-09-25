@@ -1,16 +1,95 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commitPrompt, parsePrompts } from "../shared/prompts";
+import { gitAction, parsePrompts } from "../shared/prompts";
 
-test("commit suggestions receive the skill once and preserve scope", () => {
-  assert.equal(
-    commitPrompt("Commit thay đổi. Không push."),
-    "/commit\nCommit thay đổi. Không push.",
-  );
-  assert.equal(commitPrompt("Review, then COMMIT."), "/commit\nReview, then COMMIT.");
-  assert.equal(commitPrompt("/commit\nKeep unrelated work."), "/commit\nKeep unrelated work.");
-  assert.equal(commitPrompt("Review the commitment."), null);
-  assert.equal(commitPrompt("Run tests."), null);
+test("explicit Git actions distinguish commit, commit and push, and push only", () => {
+  for (const [text, kind] of [
+    ["Commit thay đổi. Không push.", "commit"],
+    ["Review, then COMMIT.", "commit"],
+    ["Hãy commit thay đổi trong plugin.", "commit"],
+    ["Please git commit the fix.", "commit"],
+    ["Create a commit for the fix.", "commit"],
+    ["Tạo commit cho thay đổi.", "commit"],
+    ["Commit and push the fix.", "commit-push"],
+    ["Commit và push thay đổi.", "commit-push"],
+    ["Commit & Push.", "commit-push"],
+    ["Commit xong rồi push origin/main.", "commit-push"],
+    ["/commit\nCommit and push the fix.", "commit-push"],
+    ["$commit and push the fix.", "commit-push"],
+    ["Push commit 5324b19 lên origin/main.", "push"],
+    ["Đã commit xong. Hãy push nhánh main.", "push"],
+    ["Do not commit. Push the existing commit.", "push"],
+  ])
+    assert.equal(gitAction(text)?.kind, kind, text);
+});
+
+test("mentions, negative requests, and existing commits do not imply a new commit", () => {
+  for (const text of [
+    "Review commit 5324b19.",
+    "Review commit and push behavior.",
+    "Kiểm tra commit gần nhất.",
+    "Không commit hoặc push.",
+    "Do not commit or push.",
+    "Don't commit and push.",
+    "Never git commit changes.",
+    "Avoid committing changes.",
+    "Commit message needs review.",
+    "Commit button needs review.",
+    "Commit đã xong.",
+    "Review the commitment.",
+    "Inspect src/commit.ts and push.ts.",
+    "Push notifications need review.",
+    "Push đã xong.",
+    "Run tests.",
+  ])
+    assert.equal(gitAction(text), null, text);
+});
+
+test("push mentions outside an explicit command do not turn a commit into a push", () => {
+  for (const text of [
+    "Commit the fix. Review commit and push behavior.",
+    "Commit changes to commit and push buttons.",
+    "Commit the push notification fix.",
+  ]) {
+    const action = gitAction(text)!;
+    assert.equal(action.kind, "commit", text);
+    assert.ok(action.prompt.startsWith("/commit --no-push\n"), text);
+  }
+});
+
+test("no-push constraints override positive push wording and skill defaults", () => {
+  for (const suffix of [
+    "Không push.",
+    "Chưa push.",
+    "Đừng push.",
+    "Do not push.",
+    "Don't push.",
+    "Never push.",
+    "Without pushing.",
+    "--no-push",
+  ]) {
+    const text = `Commit and push the fix. ${suffix}`;
+    const action = gitAction(text)!;
+    assert.equal(action.label, "Commit", text);
+    assert.ok(action.prompt.startsWith("/commit --no-push\n"), text);
+    assert.ok(action.prompt.includes(text), "the original scope and constraints remain intact");
+  }
+});
+
+test("skill commands are normalized once; push only never invokes the commit skill", () => {
+  for (const text of [
+    "/commit only the fix",
+    "$commit only the fix",
+    "/commit --no-push only the fix",
+  ]) {
+    const action = gitAction(text)!;
+    assert.ok(action.prompt.startsWith("/commit --no-push only the fix\n"));
+    assert.equal(action.prompt.match(/--no-push/g)?.length, 1);
+    assert.equal(action.prompt.match(/\/commit/g)?.length, 1);
+    assert.match(action.prompt, /Preserve unrelated work\.$/);
+  }
+  const push = "Push commit 5324b19 lên origin/main. Giữ nguyên WIP.";
+  assert.deepEqual(gitAction(push), { kind: "push", label: "Push", prompt: push });
 });
 
 test("headings, multiline Vietnamese, multiple suggestions, and marker removal", () => {

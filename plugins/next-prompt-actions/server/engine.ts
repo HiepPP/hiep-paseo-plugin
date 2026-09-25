@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
-import { commitPrompt, joinPrompts, parsePrompts } from "../shared/prompts";
+import { gitAction, joinPrompts, parsePrompts } from "../shared/prompts";
 import { Store } from "./store";
 
 export type Row = {
@@ -117,11 +117,9 @@ export class Engine {
     {
       automatic = false,
       generation,
-      skill,
     }: {
       automatic?: boolean;
       generation?: number;
-      skill?: "commit";
     } = {},
   ): Promise<boolean> {
     const keys = typeof key === "string" ? [key] : key;
@@ -143,10 +141,11 @@ export class Engine {
       )
         throw new Error("Prompt is stale, busy, or already submitted.");
       let text = joinPrompts(picked.map((c) => c.text));
-      if (skill === "commit") {
-        const prompt = picked.length === 1 && !automatic ? commitPrompt(text) : null;
-        if (!prompt) throw new Error("Commit requires one matching suggestion and a manual click.");
-        text = prompt;
+      const actions = picked.map((candidate) => gitAction(candidate.text));
+      if (actions.some(Boolean)) {
+        if (automatic || picked.length !== 1)
+          throw new Error("Git suggestions require an individual manual send.");
+        text = actions[0]!.prompt;
       }
       if (
         automatic &&
@@ -232,6 +231,12 @@ export class Engine {
         return;
       }
       const candidate = candidates[0];
+      if (gitAction(candidate.text)) {
+        entry.remaining = 0;
+        this.store.save();
+        this.note(scope.agentId, "Manual review: Git actions require a click.", stamp);
+        return;
+      }
       if (entry.evaluated.includes(candidate.key)) return;
       entry.evaluated.push(candidate.key);
       this.store.save();

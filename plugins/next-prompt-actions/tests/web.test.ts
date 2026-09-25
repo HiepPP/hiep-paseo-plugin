@@ -172,7 +172,7 @@ test("sending hook runs on click, before the acknowledgement, with its outcome",
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
-test("Commit appears on matching cards and immediately sends the skill once without changing drafts", async () => {
+test("Commit replaces Send and immediately sends the skill once without changing drafts", async () => {
   const block = "prompt: Run tests.\nwhy: Before commit.\nprompt: Commit the fix. Do not push.";
   const message = `## Next Steps\n\`\`\`\n${block}\n\`\`\``;
   let currentContext: Binding = { ...context, message };
@@ -213,7 +213,7 @@ test("Commit appears on matching cards and immediately sends the skill once with
   const cleanup = install(
     {
       inspect: (scope) => engine.inspect(scope),
-      send: async (scope, key, skill) => ({ sent: await engine.send(scope, key, { skill }) }),
+      send: async (scope, key) => ({ sent: await engine.send(scope, key) }),
       sending: (outcome) => outcomes.push(outcome),
     },
     document as unknown as Parameters<typeof install>[1],
@@ -223,12 +223,14 @@ test("Commit appears on matching cards and immediately sends the skill once with
     await pause();
     const commit = document.querySelector(".npa-commit")!;
     assert.equal(document.querySelectorAll(".npa-commit").length, 1);
+    assert.equal(commit.closest(".npa-row")!.querySelectorAll("button").length, 2);
     assert.equal(commit.textContent, "Commit");
     assert.equal(
       commit.closest(".npa-row")!.querySelector(".npa-label")!.textContent,
       "Commit the fix. Do not push.",
     );
     assert.equal(document.querySelector(".npa-all .npa-commit"), null);
+    assert.equal(document.querySelector(".npa-all"), null, "Git actions cannot be batch-sent");
     assert.equal(commit.disabled, false);
     currentContext = { ...currentContext, agentId: "other" };
     commit.dispatchEvent(new window.Event("click"));
@@ -240,7 +242,9 @@ test("Commit appears on matching cards and immediately sends the skill once with
     assert.equal(outcomes.length, 1, "Board navigation starts before the send acknowledgement");
     assert.equal(commit.disabled, true);
     await pause();
-    assert.deepEqual(sent, ["/commit\nCommit the fix. Do not push."]);
+    assert.deepEqual(sent, [
+      "/commit --no-push\nCommit the fix. Do not push.\nCommit only the described changes. Preserve unrelated work.",
+    ]);
     assert.equal(document.querySelector("textarea")!.value, "unsent draft");
     acknowledge();
     assert.equal(await outcomes[0], true);
@@ -252,6 +256,74 @@ test("Commit appears on matching cards and immediately sends the skill once with
   } finally {
     cleanup();
     engine.close();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+test("Git cards show one matching primary action while mentions keep Send", async () => {
+  const prompts = [
+    "Commit the fix.",
+    "Commit and push the fix.",
+    "Push the existing commit.",
+    "Review commit abc123.",
+    "Không commit hoặc push.",
+  ];
+  const block = prompts.map((text) => `prompt: ${text}`).join("\n");
+  const current: Snapshot = {
+    ...snapshot,
+    candidates: prompts.map((text, i) => ({
+      ...snapshot.candidates[0],
+      key: `key${i}`,
+      block,
+      text,
+    })),
+  };
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">${block}</span></div></div></body></html>`,
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const sent: (string | string[])[] = [];
+  const cleanup = install(
+    {
+      inspect: async () => current,
+      send: async (_scope, key) => {
+        sent.push(key);
+        return { sent: true };
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => context,
+  );
+  try {
+    await pause();
+    const rows = document.querySelectorAll(".npa-row");
+    assert.equal(rows.length, prompts.length);
+    assert.deepEqual(
+      Array.from(rows, (row: Node) =>
+        Array.from(row.querySelectorAll("button"), (button: Node) => button.textContent),
+      ),
+      [
+        ["Edit", "Commit"],
+        ["Edit", "Commit & Push"],
+        ["Edit", "Push"],
+        ["Edit", "Send"],
+        ["Edit", "Send"],
+      ],
+    );
+    assert.equal(document.querySelectorAll(".npa-send.npa-commit").length, 2);
+    assert.equal(document.querySelectorAll(".npa-send.npa-push").length, 1);
+    assert.equal(document.querySelector(".npa-all"), null);
+    rows[1].querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    rows[2].querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.deepEqual(sent, ["key1", "key2"]);
+  } finally {
+    cleanup();
     if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }

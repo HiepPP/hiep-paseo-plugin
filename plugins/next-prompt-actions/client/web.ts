@@ -1,5 +1,5 @@
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
-import { commitPrompt, joinPrompts } from "../shared/prompts";
+import { gitAction, joinPrompts } from "../shared/prompts";
 
 export interface Node {
   textContent: string | null;
@@ -93,7 +93,7 @@ export function desktopSupported() {
 
 type Controller = {
   inspect(scope: Scope): Promise<Snapshot>;
-  send(scope: Scope, key: string | string[], skill?: "commit"): Promise<{ sent: boolean }>;
+  send(scope: Scope, key: string | string[]): Promise<{ sent: boolean }>;
   /** Runs on click with the pending outcome, so navigation need not wait for the send. */
   sending?(outcome: Promise<boolean>): void;
 };
@@ -117,14 +117,13 @@ const styles = `
 [${OWNER}] button {display:inline-flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;font:inherit;font-size:12px;font-weight:600;line-height:18px;white-space:nowrap;cursor:pointer;user-select:none;border:1px solid transparent;border-radius:6px;padding:6px 12px;min-height:32px;transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .12s ease;}
 [${OWNER}] button::before {content:"";width:14px;height:14px;flex-shrink:0;background:currentColor;mask:var(--npa-icon) center / contain no-repeat;}
 [${OWNER}] .npa-edit {--npa-icon:${iconMask('<path d="m16 3 5 5-13 13H3v-5L16 3Zm-2 2 5 5"/>')};}
-[${OWNER}] .npa-commit {--npa-icon:${iconMask('<circle cx="12" cy="12" r="4"/><path d="M3 12h5m8 0h5"/>')};}
+[${OWNER}] .npa-send.npa-commit {--npa-icon:${iconMask('<circle cx="12" cy="12" r="4"/><path d="M3 12h5m8 0h5"/>')};}
+[${OWNER}] .npa-send.npa-push {--npa-icon:${iconMask('<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>')};}
 [${OWNER}] .npa-send {--npa-icon:${iconMask('<path d="M12 19V5m-6 6 6-6 6 6"/>')};}
 [${OWNER}] .npa-send {min-width:88px;background:var(--npa-ink,#303034);color:var(--npa-paper,#fff);box-shadow:0 1px 2px color-mix(in srgb,var(--npa-ink,#303034) 15%,transparent);}
-[${OWNER}] .npa-commit {background:color-mix(in srgb,var(--npa-ink,#303034) 7%,transparent);color:var(--npa-ink,#303034);border-color:color-mix(in srgb,var(--npa-ink,#303034) 18%,transparent);}
 [${OWNER}] .npa-edit {background:color-mix(in srgb,var(--npa-ink,#303034) 4%,transparent);color:var(--npa-ink,#303034);border-color:color-mix(in srgb,var(--npa-ink,#303034) 40%,transparent);}
 @media (hover:hover) {
   [${OWNER}] .npa-send:not(:disabled):hover {background:color-mix(in srgb,var(--npa-ink,#303034) 86%,var(--npa-paper,#fff));box-shadow:0 2px 5px color-mix(in srgb,var(--npa-ink,#303034) 18%,transparent);}
-  [${OWNER}] .npa-commit:not(:disabled):hover {background:color-mix(in srgb,var(--npa-ink,#303034) 12%,transparent);border-color:color-mix(in srgb,var(--npa-ink,#303034) 32%,transparent);}
   [${OWNER}] .npa-edit:not(:disabled):hover {background:color-mix(in srgb,var(--npa-ink,#303034) 8%,transparent);border-color:color-mix(in srgb,var(--npa-ink,#303034) 60%,transparent);}
 }
 [${OWNER}] button:not(:disabled):active {transform:translateY(1px);box-shadow:none;}
@@ -251,7 +250,7 @@ export function install(controller: Controller, doc: Document = document, identi
     ui.appendChild(note);
     const edits: Node[] = [];
     const sends: Node[] = [];
-    const commits = new Map<number, Node>();
+    const gitActions = candidates.map((candidate) => gitAction(candidate.text));
     function update(next: Candidate[], latest: Snapshot) {
       note.textContent = latest.note;
       next.forEach((candidate, index) => {
@@ -263,11 +262,9 @@ export function install(controller: Controller, doc: Document = document, identi
               ? "Check chat"
               : candidate.state === "sending"
                 ? "Sending..."
-                : "Send";
+                : (gitActions[index]?.label ?? "Send");
         sends[index].disabled =
           latest.busy || candidate.state !== "ready" || latest.note === "Jev reviewing...";
-        const commit = commits.get(index);
-        if (commit) commit.disabled = sends[index].disabled;
       });
       // The trailing pair acts on every prompt as one message, so it needs all of them unsent.
       if (sends.length > next.length) {
@@ -280,7 +277,7 @@ export function install(controller: Controller, doc: Document = document, identi
       }
     }
     async function action(run: () => Promise<unknown>, label: string) {
-      [...edits, ...sends, ...commits.values()].forEach((button) => {
+      [...edits, ...sends].forEach((button) => {
         button.disabled = true;
       });
       note.textContent = label;
@@ -301,7 +298,7 @@ export function install(controller: Controller, doc: Document = document, identi
       key: c.key as string | string[],
       all: false,
     }));
-    if (candidates.length > 1)
+    if (candidates.length > 1 && !gitActions.some(Boolean))
       items.push({
         text: joinPrompts(candidates.map((c) => c.text)),
         why: undefined,
@@ -310,6 +307,7 @@ export function install(controller: Controller, doc: Document = document, identi
       });
     for (const [index, item] of items.entries()) {
       const candidate = candidates[0];
+      const git = gitActions[index];
       const row = doc.createElement("div");
       row.setAttribute("class", item.all ? "npa-row npa-all" : "npa-row");
       if (!item.all) {
@@ -350,33 +348,25 @@ export function install(controller: Controller, doc: Document = document, identi
       actions.appendChild(edit);
       const send = doc.createElement("button");
       send.setAttribute("type", "button");
-      send.setAttribute("class", "npa-send");
+      send.setAttribute(
+        "class",
+        git ? `npa-send npa-${git.kind === "push" ? "push" : "commit"}` : "npa-send",
+      );
       send.setAttribute(
         "aria-label",
         item.all
           ? "Send all suggested prompts as one message"
-          : `Send suggested prompt: ${item.text}`,
+          : `${git?.label ?? "Send"} suggested prompt: ${item.text}`,
       );
-      function submit(button: Node, skill?: "commit") {
-        if (button.disabled || !valid(block, context, candidate)) return;
+      send.addEventListener("click", () => {
+        if (send.disabled || !valid(block, context, candidate)) return;
         send.textContent = "Sending...";
         void action(async () => {
-          const outcome = controller.send(context, item.key, skill);
+          const outcome = controller.send(context, item.key);
           controller.sending?.(outcome.then((r) => r.sent).catch(() => false));
           await outcome;
         }, "Sending...");
-      }
-      if (!item.all && commitPrompt(item.text)) {
-        const commit = doc.createElement("button");
-        commit.setAttribute("type", "button");
-        commit.setAttribute("class", "npa-commit");
-        commit.setAttribute("aria-label", `Send suggested prompt with /commit: ${item.text}`);
-        commit.textContent = "Commit";
-        commit.addEventListener("click", () => submit(commit, "commit"));
-        commits.set(index, commit);
-        actions.appendChild(commit);
-      }
-      send.addEventListener("click", () => submit(send));
+      });
       sends.push(send);
       actions.appendChild(send);
       row.appendChild(actions);

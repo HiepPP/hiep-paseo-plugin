@@ -1,9 +1,70 @@
 // `whys[i]` is the optional reason shown under `prompts[i]`; it is never sent.
 export type PromptBlock = { block: string; prompts: string[]; whys: string[] };
 
-export function commitPrompt(text: string): string | null {
-  if (!/\bcommit\b/i.test(text)) return null;
-  return /^\s*\/commit(?=\s|$)/.test(text) ? text : `/commit\n${text}`;
+export type GitAction = {
+  kind: "commit" | "commit-push" | "push";
+  label: "Commit" | "Commit & Push" | "Push";
+  prompt: string;
+};
+
+// Recognize explicit actions conservatively; mentions and unclear wording keep normal Send.
+export function gitAction(text: string): GitAction | null {
+  const normalized = text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase();
+  const skill = /^\s*[/$]commit(?=\s|$)/i.test(text);
+  const clauses = normalized
+    .replace(/^\s*[/$]commit(?=\s|$)/, "commit")
+    .split(/[!?;,\n]+|\.(?=\s|$)|\b(?:then|roi|sau do)\b/);
+  const commands = clauses.map((clause) =>
+    clause
+      .trim()
+      .replace(/^(?:(?:please|hay|vui long|chi can|chi)\s+)+/, "")
+      .replace(/^git\s+/, "")
+      .replace(/^(?:create(?: a)?|tao(?: mot)?)\s+(?=commit\b)/, ""),
+  );
+  const denied = (verb: string) =>
+    new RegExp(
+      `\\b(?:do not|don['’]t|never|not|no|without|avoid|skip|khong|chua|dung|cam)(?:\\s+\\w+){0,3}\\s+${verb}\\b`,
+    ).test(normalized);
+  const isCommit = (command: string) =>
+    /^commit(?=[:\s]|$)(?!\s+(?:messages?|buttons?|hash|sha|history|status|diff|log|is|was|has|da|already|done|completed)\b)/.test(
+      command,
+    );
+  const isPush = (command: string) =>
+    /^push(?=[:\s]|$)(?!\s+(?:notifications?|buttons?|events?|messages?|behavior|is|was|has|da|already|done|completed)\b)/.test(
+      command,
+    );
+  const commit = !denied("commit(?:ting|s)?") && (skill || commands.some(isCommit));
+  const noPush = /--no-push\b/.test(normalized) || denied("push(?:ing)?");
+  const push =
+    !noPush &&
+    (commands.some(isPush) ||
+      (commit &&
+        commands.some(
+          (command) =>
+            isCommit(command) &&
+            command
+              .split(/\b(?:and|va)\b|[&+]/)
+              .slice(1)
+              .some((part) => isPush(part.trim().replace(/^git\s+/, ""))),
+        )));
+  if (!commit) return push ? { kind: "push", label: "Push", prompt: text } : null;
+
+  const command = push ? "/commit" : "/commit --no-push";
+  const prompt = skill
+    ? text.replace(
+        /^\s*[/$]commit(?=\s|$)/i,
+        push || /--no-push\b/i.test(text) ? "/commit" : command,
+      )
+    : `${command}\n${text}`;
+  return {
+    kind: push ? "commit-push" : "commit",
+    label: push ? "Commit & Push" : "Commit",
+    prompt: `${prompt}\nCommit only the described changes. Preserve unrelated work.`,
+  };
 }
 
 // Accept only top-level fenced suggestions in an explicit next-step section.

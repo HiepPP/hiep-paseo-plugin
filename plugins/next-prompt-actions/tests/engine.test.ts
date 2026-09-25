@@ -111,22 +111,26 @@ test("Send all submits every prompt once as one numbered message", async () => {
   assert.deepEqual(states, ["sent", "sent"]);
   await assert.rejects(f.engine.send(scope, keys[1]));
 });
-test("Commit sends the selected suggestion with /commit and shares Send reservations", async () => {
+test("manual Git sends resolve their action server-side and share Send reservations", async () => {
   const f = fixture();
   f.current.rows[1].text =
     "## Next Steps\n```\nprompt: Commit the fix. Do not push.\nwhy: Save changes.\nprompt: Run tests.\n```";
   const [commit, other] = (await f.engine.inspect(scope)).candidates;
-  await assert.rejects(f.engine.send(scope, other.key, { skill: "commit" }));
-  await assert.rejects(f.engine.send(scope, [commit.key, other.key], { skill: "commit" }));
-  await assert.rejects(f.engine.send(scope, commit.key, { skill: "commit", automatic: true }));
+  await assert.rejects(f.engine.send(scope, [commit.key, other.key]), /individual manual send/);
+  await assert.rejects(
+    f.engine.send(scope, commit.key, { automatic: true }),
+    /individual manual send/,
+  );
   f.current.busy = true;
-  await assert.rejects(f.engine.send(scope, commit.key, { skill: "commit" }));
+  await assert.rejects(f.engine.send(scope, commit.key));
   f.current.busy = false;
   assert.equal(f.sent.length, 0);
-  assert.equal(await f.engine.send(scope, commit.key, { skill: "commit" }), true);
-  assert.equal(f.sent[0].text, "/commit\nCommit the fix. Do not push.");
+  assert.equal(await f.engine.send(scope, commit.key), true);
+  assert.equal(
+    f.sent[0].text,
+    "/commit --no-push\nCommit the fix. Do not push.\nCommit only the described changes. Preserve unrelated work.",
+  );
   await assert.rejects(f.engine.send(scope, commit.key));
-  await assert.rejects(f.engine.send(scope, commit.key, { skill: "commit" }));
   assert.equal(f.sent.length, 1);
 });
 test("Commit does not duplicate an existing skill and uncertain sends cannot retry", async () => {
@@ -134,12 +138,42 @@ test("Commit does not duplicate an existing skill and uncertain sends cannot ret
   f.current.rows[1].text = "## Next Steps\n```\nprompt: /commit only the fix\n```";
   const { key } = (await f.engine.inspect(scope)).candidates[0];
   f.failSend();
-  assert.equal(await f.engine.send(scope, key, { skill: "commit" }), false);
-  assert.equal(f.sent[0].text, "/commit only the fix");
+  assert.equal(await f.engine.send(scope, key), false);
+  assert.equal(
+    f.sent[0].text,
+    "/commit --no-push only the fix\nCommit only the described changes. Preserve unrelated work.",
+  );
   assert.equal(f.store.get(scope.agentId).handled[key], "unknown");
-  await assert.rejects(f.engine.send(scope, key, { skill: "commit" }));
   await assert.rejects(f.engine.send(scope, key));
   assert.equal(f.sent.length, 1);
+});
+test("commit and push uses the skill; pushing an existing commit preserves the plain prompt", async () => {
+  for (const text of ["Commit and push only the fix.", "Push commit abc123 to origin/main."]) {
+    const f = fixture();
+    f.current.rows[1].text = `## Next Steps\n\`\`\`\nprompt: ${text}\n\`\`\``;
+    const { key } = (await f.engine.inspect(scope)).candidates[0];
+    await f.engine.send(scope, key);
+    assert.equal(
+      f.sent[0].text,
+      text.startsWith("Commit")
+        ? `/commit\n${text}\nCommit only the described changes. Preserve unrelated work.`
+        : text,
+    );
+  }
+});
+test("Git actions require a manual click without consuming a Jev evaluation", async () => {
+  let evaluations = 0;
+  const f = fixture(async () => {
+    evaluations++;
+    return true;
+  });
+  f.current.rows[1].text = "## Next Steps\n```\nprompt: Commit the fix.\n```";
+  await f.engine.toggle(scope, true);
+  f.engine.started(scope.agentId);
+  await f.engine.ended(scope, true);
+  assert.equal(evaluations, 0);
+  assert.equal(f.sent.length, 0);
+  assert.match((await f.engine.inspect(scope)).note, /Git actions require a click/);
 });
 test("a new turn drops the previous turn's note", async () => {
   const f = fixture();
