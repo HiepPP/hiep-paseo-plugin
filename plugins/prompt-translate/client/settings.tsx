@@ -9,7 +9,12 @@ import {
   SettingsSwitch,
 } from "@getpaseo/plugin/client/ui";
 import { Text } from "react-native";
-import { providerSchema, translateSettings, type TranslateSettings } from "../shared/settings";
+import {
+  chineseScriptSchema,
+  providerSchema,
+  translateSettings,
+  type TranslateSettings,
+} from "../shared/settings";
 import { current } from "./state";
 
 export function TranslateSettingsScreen({ theme }: PluginSurfaceProps) {
@@ -69,6 +74,34 @@ export function TranslateSettingsScreen({ theme }: PluginSurfaceProps) {
             value={values.enhanceShortcut}
             disabled={settings.saving}
             onValueChange={(enhanceShortcut) => void save({ ...values, enhanceShortcut })}
+          />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Reply language">
+        <SettingsCard>
+          <SettingsSwitch
+            label="Match original language"
+            hint="Your language choice comes first; otherwise follow active modes, then Vietnamese for Vietnamese drafts."
+            value={values.matchReplyLanguage}
+            disabled={settings.saving}
+            onValueChange={(matchReplyLanguage) => void save({ ...values, matchReplyLanguage })}
+          />
+          <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>
+            Choose Caveman mode in each conversation's composer. Modes are saved separately per
+            agent.
+          </Text>
+          <SettingsSelect
+            label="Chinese script"
+            hint="For Wenyan modes; explicit requests in your draft take priority."
+            value={values.chineseScript}
+            options={[
+              { label: "Skill default", value: "skill-default" },
+              { label: "Simplified Chinese", value: "simplified" },
+            ]}
+            disabled={settings.saving}
+            onValueChange={(chineseScript) =>
+              void save({ ...values, chineseScript: chineseScriptSchema.parse(chineseScript) })
+            }
           />
         </SettingsCard>
       </SettingsSection>

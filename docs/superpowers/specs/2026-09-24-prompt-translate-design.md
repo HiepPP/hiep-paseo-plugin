@@ -1,6 +1,6 @@
 # prompt-translate design
 
-Date: 2026-09-24. Status: approved design, not implemented.
+Date: 2026-09-24. Status: implemented in source; focused live mode checks passed.
 
 ## Goal
 
@@ -84,6 +84,9 @@ Inputs are capped at 20,000 characters, and longer inputs are rejected.
 {
   translate: boolean;          // default true
   enhanceShortcut: boolean;    // default true
+  matchReplyLanguage: boolean; // default true; conditional preference for Vietnamese drafts
+  cavemanMode: "follow-agent" | "lite" | "full" | "ultra" | "wenyan-lite" | "wenyan-full" | "wenyan-ultra"; // default "follow-agent"
+  chineseScript: "skill-default" | "simplified"; // default "skill-default"; selected Wenyan modes only
   provider: "vercel" | "openrouter"; // default "openrouter"
   translateModel: string;      // default chosen from benchmark
   enhanceModel: string;        // default chosen from benchmark
@@ -204,3 +207,84 @@ client, logs, or errors. A missing key raises `"<provider> credential unavailabl
 - Live: `paseo plugin install`, `paseo plugin ls prompt-translate --json` shows `running`. Then a
   Vietnamese prompt shows `EN`, an English prompt shows nothing, Cmd+Enter replaces the draft,
   and the sent enhanced prompt shows `VI gốc`.
+
+## Follow-up: preserve response language and mode
+
+Status: implemented in source. Enhancing a Vietnamese draft into an English prompt can make
+the agent's final response English even when the user expects Vietnamese. The plugin should carry
+the user's response-language intent through enhancement, without changing the agent's own mode.
+
+- Keep explicit language, script, format, and style requests in the draft. Preserve skill commands
+  and mode names verbatim, including `caveman` modes such as `ultra` and `wenyan-ultra`.
+- For a Vietnamese draft, append a conditional preference to the enhanced prompt: explicit
+  language and script requests take priority over active mode defaults; keep mode brevity where
+  compatible. If neither sets a language, use Vietnamese. Let the agent resolve higher-priority
+  instructions.
+- Add a default-on `Match original language` switch under Settings → Plugins → Prompt translate.
+  With it off, enhancement sends the rewritten prompt without the conditional preference.
+- Do not infer an active mode from the draft's language. The plugin cannot inspect persistent
+  agent skills or settings, so it must not claim that Vietnamese output is guaranteed.
+- Keep a user-selected Chinese response mode, including an explicit Simplified Chinese request,
+  even when the draft is Vietnamese. Do not switch languages to save tokens on the user's behalf.
+  The current local `caveman` skill lists `wenyan-*` modes but does not define a Simplified Chinese
+  mode; its examples use traditional characters. Preserve the requested script instead of inferring
+  it from a mode name.
+- This phase changes only the prompt sent to the agent and adds a settings control. It does not
+  translate or replace the agent's response in the UI, add another model call, or change the
+  default bubble translation.
+
+Check with a plain Vietnamese draft, an explicit English-response request, a draft invoking
+`caveman ultra` (still terse Vietnamese), a `wenyan-ultra` request (still Chinese), and an explicit
+Simplified Chinese request (still simplified). In every case, preserve code, paths, commands, and
+fenced blocks exactly. Also check a mode set in an earlier agent turn.
+
+Verified on 2026-09-24: offline checks passed; live enhancement preserved `/caveman ultra`,
+`/caveman wenyan-ultra`, and an explicit Simplified Chinese request. After plugin reload, its RPC
+returned the conditional preference and `original` lookup matched the draft. Paseo settings showed
+the new switch and accepted off/on changes. A real agent gave a terse Vietnamese reply under
+`caveman ultra`. Its first `wenyan-ultra` reply used traditional characters; inspection showed
+the cached enhancement had dropped the explicit script request. Strengthening the enhance prompt
+and changing its cache key made the same synthetic test preserve every instruction; a fresh agent
+replied `检查完毕。` in Simplified Chinese. Another agent kept `wenyan-ultra` across turns and replied
+`核查已毕。` to a later Vietnamese draft without repeating the mode. These observations do not
+guarantee every agent or prompt.
+
+## Follow-up: choose Caveman mode in settings
+
+The Reply language section also offers Caveman mode: Follow agent (default), Lite, Full, Ultra,
+Wenyan Lite, Wenyan Full, and Wenyan Ultra. Each selected mode adds its documented `/caveman`
+command to enhanced prompts. An explicit `/caveman` command in the draft wins. For a selected
+Wenyan mode, Chinese script offers Skill default or Simplified Chinese; an explicit script request
+in the draft wins. These are prompt instructions and require the skill in the agent environment.
+The plugin cannot read or guarantee the agent's persistent mode. Mode and script settings apply
+to Cmd/Ctrl+Enter enhancement and desktop composer sends, not displayed translations.
+
+Verified on 2026-09-24: the installed plugin showed all mode options, exposed Chinese script for
+Wenyan Ultra, and returned a prompt with `/caveman wenyan-ultra` plus the Simplified Chinese
+instruction. A fresh Codex agent replied `一加一等于二。`; the test agent was archived and settings
+were restored to Follow agent / Skill default. The agent result is one focused smoke test, not a
+guarantee for every provider or prompt.
+
+## Follow-up: Caveman menu in the composer toolbar
+
+The composer toolbar uses Paseo's internal `AgentControlTrigger` and `Combobox`. The plugin SDK
+only exposes `addComposerPill`, which renders in the separate track above the composer. The plugin
+cannot import app-internal UI modules. A native DOM select was tried and rejected for its visual
+style, then a host-rendered pill was tried and rejected for its placement. Within plugin scope,
+the desktop DOM adapter adds a custom dropdown to the toolbar, styled to match the adjacent
+controls. Its seven choices write the existing host-scoped `cavemanMode` setting. The control and
+observer are removed when the plugin unloads.
+
+## Follow-up: apply Caveman mode on each composer send
+
+Paseo has no plugin hook before prompt submission; `agent.turn_started` runs after the turn begins.
+The desktop adapter adds the currently selected `/caveman` command immediately before Enter or
+the primary send/queue button submits the draft. The selected mode is applied in client state as
+soon as the dropdown choice is made, so Follow agent → Lite works even before settings persistence
+finishes. Explicit `/caveman` text in the draft wins. Follow agent adds no command. Sends outside
+the desktop composer, such as API calls and voice auto-send, do not use this adapter.
+
+The Claude Caveman `UserPromptSubmit` hook reads a `/caveman` command at the start of each prompt
+and injects mode context for that turn. Codex uses the Caveman skill instead of that Claude hook;
+the outgoing prompt carries the same command, but the plugin cannot confirm skill activation or
+the response style from source alone.

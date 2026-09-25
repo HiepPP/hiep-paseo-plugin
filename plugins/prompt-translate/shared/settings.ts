@@ -8,6 +8,16 @@ export const DEFAULT_ENHANCE_MODEL = "google/gemini-2.5-flash-lite";
 
 export const providerSchema = z.enum(["vercel", "openrouter"]);
 export type Provider = z.output<typeof providerSchema>;
+export const cavemanModeSchema = z.enum([
+  "follow-agent",
+  "lite",
+  "full",
+  "ultra",
+  "wenyan-lite",
+  "wenyan-full",
+  "wenyan-ultra",
+]);
+export const chineseScriptSchema = z.enum(["skill-default", "simplified"]);
 
 export const translateSettings = defineSettings({
   id: "translate",
@@ -16,6 +26,9 @@ export const translateSettings = defineSettings({
   schema: z.object({
     translate: z.boolean().default(true),
     enhanceShortcut: z.boolean().default(true),
+    matchReplyLanguage: z.boolean().default(true),
+    cavemanMode: cavemanModeSchema.default("follow-agent"),
+    chineseScript: chineseScriptSchema.default("skill-default"),
     provider: providerSchema.default("openrouter"),
     translateModel: z.string().trim().min(1).default(DEFAULT_TRANSLATE_MODEL),
     enhanceModel: z.string().trim().min(1).default(DEFAULT_ENHANCE_MODEL),

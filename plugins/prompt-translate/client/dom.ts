@@ -5,20 +5,32 @@ export interface El {
   parentElement: El | null;
   nextElementSibling: El | null;
   value?: string;
+  selected?: boolean;
   style: { cssText: string };
   querySelector(selector: string): El | null;
   querySelectorAll(selector: string): ArrayLike<El>;
   closest(selector: string): El | null;
   getAttribute(name: string): string | null;
   setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
   hasAttribute(name: string): boolean;
+  contains(node: El | null): boolean;
   append(...nodes: (El | string)[]): void;
   after(...nodes: El[]): void;
   remove(): void;
-  addEventListener(name: string, handler: () => void): void;
+  addEventListener(name: string, handler: (event: DomEvent) => void, capture?: boolean): void;
+  removeEventListener(name: string, handler: (event: DomEvent) => void, capture?: boolean): void;
   focus?(): void;
   setSelectionRange?(start: number, end: number): void;
   dispatchEvent(event: object): boolean;
+  click(): void;
+}
+export interface DomEvent {
+  key?: string;
+  target: unknown;
+  preventDefault(): void;
+  stopPropagation(): void;
+  stopImmediatePropagation(): void;
 }
 export type Key = {
   key: string;
@@ -37,15 +49,34 @@ export interface Doc {
   createElement(tag: string): El;
   querySelectorAll(selector: string): ArrayLike<El>;
   defaultView: {
+    innerWidth?: number;
     Event: new (type: string, init?: { bubbles?: boolean }) => object;
     KeyboardEvent?: new (
       type: string,
-      init: { key: string; code?: string; bubbles?: boolean; cancelable?: boolean },
+      init: {
+        key: string;
+        code?: string;
+        bubbles?: boolean;
+        cancelable?: boolean;
+        metaKey?: boolean;
+        ctrlKey?: boolean;
+      },
     ) => object;
-    getComputedStyle?(node: El): { color: string };
+    getComputedStyle?(node: El): {
+      color: string;
+      backgroundColor: string;
+      fontFamily?: string;
+      fontSize?: string;
+      fontWeight?: string;
+      fontStyle?: string;
+      lineHeight?: string;
+      letterSpacing?: string;
+    };
   } | null;
   addEventListener(name: "keydown", handler: (event: Key) => void, capture: boolean): void;
+  addEventListener(name: "click", handler: (event: DomEvent) => void, capture: boolean): void;
   removeEventListener(name: "keydown", handler: (event: Key) => void, capture: boolean): void;
+  removeEventListener(name: "click", handler: (event: DomEvent) => void, capture: boolean): void;
 }
 export type Observer = new (callback: () => void) => {
   observe(node: El, options: object): void;

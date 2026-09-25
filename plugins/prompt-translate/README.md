@@ -8,16 +8,69 @@ Learn English prompting from your own Vietnamese prompts, on Paseo desktop.
   the rewrite cancels it. The sent bubble shows your Vietnamese original, labeled `VI gốc`.
   If the host does not send it (for example in a compact window), the prompt stays in the
   composer with a hint to press Enter.
+- For Vietnamese drafts, Match original language asks the agent to answer in Vietnamese unless
+  you requested another language or an active response mode specifies one. Your explicit language
+  or script choice takes priority over mode defaults; compatible `caveman` brevity stays. This is
+  a prompt preference, not a translation of the reply.
+- Caveman mode is read immediately before each desktop composer send (Enter or the primary
+  send/queue button). Cmd/Ctrl+Enter enhances the text first, then applies the latest selection,
+  including changes made while enhancement is running.
+- Default resets earlier Caveman modes and restores the agent's normal response style and the
+  current request's language. The stored `follow-agent` value is retained for compatibility.
+  Explicit `/caveman` or `$caveman` commands in the draft take priority over the dropdown.
+- Mode instructions use native `UserPromptSubmit` **hidden context**. The plugin never inserts
+  mode commands or a response-mode block into the sent prompt. Enhancement changes only the
+  prompt content; reply-language preferences also travel through the hook.
+- The hook calls the installed Caveman parser and mode tracker, including its mode-specific
+  ruleset and reminders. State is isolated per Paseo agent and native session. Explicit user
+  commands override the dropdown for that turn. Model compliance is still probabilistic.
 
-Both features switch on or off under Settings → Plugins → Prompt translate.
+Choose Caveman mode in each conversation's composer. Each agent starts at Default and keeps
+its own selection. The legacy host-wide `cavemanMode` setting is ignored. Settings retain the
+shared reply-language and Chinese-script preferences.
+
+## Install native hooks
+
+Requires an inspected Caveman installation with `src/hooks/caveman-mode-tracker.js`,
+`caveman-config.js`, and `caveman-parse.js` (verified with Caveman 2.7.0).
+With the user's authorization, run:
+
+```sh
+node scripts/install-hooks.mjs /absolute/path/to/installed/caveman
+```
+
+This appends only this plugin's hook to `~/.claude/settings.json` and `~/.codex/hooks.json`,
+preserves other settings, and makes a private `.prompt-translate-backup` beside each config.
+It records the installed Caveman path under the Paseo home, never in Git. Re-run after moving
+Node, this plugin, or Caveman. Do not restore the full backup over later unrelated config edits.
+
+Codex requires reviewing/trusting the exact new hook through `/hooks`. Trust only the
+`prompt-translate/server/caveman-hook.cjs` entry. Existing Paseo Codex agents need
+`paseo agent reload <id>` after trust/config changes; reloading the plugin alone cannot reload
+provider hook configuration. Claude sessions may also need an agent reload after registration.
+No daemon restart or Paseo rebuild is needed.
+
+Remove this registration with `node scripts/install-hooks.mjs --remove` before removing or
+moving this plugin. Disabling a Paseo plugin does not unregister native provider hooks.
 
 ## Compatibility and limits
 
-Paseo 0.8.x and 0.9.x desktop only, through a private DOM adapter. Paseo updates can break it; it
-then shows nothing rather than failing. Browser and mobile clients receive no contribution.
-While the shortcut is on, Cmd/Ctrl+Enter no longer queues a message from the keyboard; use the
-Queue button. Prompts sent before translation was switched on are shown only from the cache and
-are never sent to a model.
+Paseo 0.8.x and 0.9.x desktop, through a private DOM/React adapter. Verified natively with Codex
+0.156.0 and Claude via Paseo. Browser/mobile clients have no composer contribution. New-agent
+composers without an agent ID send normally; mode selection becomes available once the agent
+exists. Unsupported providers cannot execute these Claude/Codex hooks.
+
+Each composer send stores its mode and a hash of the prompt, never the raw text, in
+`plugin-data/prompt-translate/agents/<id>/pending`. The hook consumes matching snapshots in
+order; snapshots expire after 24 hours. Outside-composer sends use the agent's saved mode.
+New queue entries bind their snapshot token to the host queue item ID. Editing an entry
+waits for its snapshot to be cancelled before restoring the draft; sending again captures
+the newly selected mode. Bindings survive plugin reload. Entries created before this
+queue-binding update have no binding and can still retain old snapshots until expiry. `last-hook.json` contains only
+mode/session/hash/timestamp metadata for diagnosis, not prompt text or model output.
+
+While enhancement is on, Cmd/Ctrl+Enter enhances instead of the host keyboard Queue shortcut;
+use the Queue button. Prompts sent before translation was enabled are cache-only.
 
 ## Privacy and credentials
 

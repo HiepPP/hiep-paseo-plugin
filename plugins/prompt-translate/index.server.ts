@@ -1,11 +1,22 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { homedir } from "node:os";
 import path from "node:path";
-import { enhanceRpc, originalRpc, translateRpc } from "./shared/contracts";
+import {
+  enhanceRpc,
+  originalRpc,
+  translateRpc,
+  modeReadRpc,
+  modeWriteRpc,
+  prepareModeRpc,
+  cancelModeRpc,
+  bindQueueModeRpc,
+  cancelQueueModeRpc,
+} from "./shared/contracts";
 import { translateSettings } from "./shared/settings";
 import { resolveEndpoint } from "./server/credentials";
 import { createCompleter } from "./server/llm";
 import { createService } from "./server/service";
+import { AgentModes } from "./server/modes";
 import { Store } from "./server/store";
 
 export default function contribute(server: PluginServerContext) {
@@ -13,14 +24,23 @@ export default function contribute(server: PluginServerContext) {
   const configFile = path.join(home, "config.json");
   const settings = server.registerSettings(translateSettings);
   const store = new Store(path.join(home, "plugin-data/prompt-translate/cache.json"));
+  const modes = new AgentModes(path.join(home, "plugin-data/prompt-translate"));
+  const readSettings = async () => {
+    const value = await settings.read();
+    return value.status === "ready" ? value.values : translateSettings.schema.parse({});
+  };
+  server.handle(modeReadRpc, ({ agentId }) => modes.get(agentId));
+  server.handle(modeWriteRpc, ({ agentId, mode }) => modes.set(agentId, mode));
+  server.handle(prepareModeRpc, async (input) => modes.prepare(input, await readSettings()));
+  server.handle(cancelModeRpc, ({ agentId, token }) => modes.cancel(agentId, token));
+  server.handle(bindQueueModeRpc, ({ agentId, token, queueId }) =>
+    modes.bindQueue(agentId, token, queueId),
+  );
+  server.handle(cancelQueueModeRpc, ({ agentId, queueId }) => modes.cancelQueue(agentId, queueId));
   const service = createService({
     store,
     complete: createCompleter((provider) => resolveEndpoint(provider, configFile)),
-    async settings() {
-      const current = await settings.read();
-      // Invalid stored settings keep working on defaults until the user resets them.
-      return current.status === "ready" ? current.values : translateSettings.schema.parse({});
-    },
+    settings: readSettings,
   });
   server.handle(translateRpc, (input) => service.translate(input));
   server.handle(enhanceRpc, (input) => service.enhance(input));

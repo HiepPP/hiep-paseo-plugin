@@ -1,3 +1,4 @@
+import { preserveCavemanCommand, stripCavemanMode } from "../shared/caveman";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hasVietnamese } from "../shared/vietnamese";
@@ -23,8 +24,30 @@ test("settings parse {} into complete defaults", () => {
   assert.deepEqual(translateSettings.schema.parse({}), {
     translate: true,
     enhanceShortcut: true,
+    matchReplyLanguage: true,
+    cavemanMode: "follow-agent",
+    chineseScript: "skill-default",
     provider: "openrouter",
     translateModel: "google/gemini-2.5-flash-lite",
     enhanceModel: "google/gemini-2.5-flash-lite",
   });
+  assert.equal(
+    translateSettings.schema.parse({ translate: false, enhanceShortcut: false }).matchReplyLanguage,
+    true,
+  );
+  assert.equal(
+    translateSettings.schema.parse({ translate: false, enhanceShortcut: false }).cavemanMode,
+    "follow-agent",
+  );
+});
+
+test("explicit draft command survives a rewrite that omitted it", () => {
+  for (const command of ["/caveman lite", "$caveman full", "/caveman off"]) {
+    const result = preserveCavemanCommand(
+      "Explain git status.",
+      `${command}\n\nGiải thích git status.`,
+    );
+    assert.equal(result, `${command}\n\nExplain git status.`);
+    assert.equal(stripCavemanMode(result), result);
+  }
 });

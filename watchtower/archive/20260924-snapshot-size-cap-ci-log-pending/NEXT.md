@@ -4,8 +4,8 @@
 
 - Title: Cap untracked file size in turn snapshots, and mark CI logs that are not ready yet
 - Slug: 20260924-snapshot-size-cap-ci-log-pending
-- Status: DONE
-- Updated: 2026-09-24
+- Status: ARCHIVED
+- Updated: 2026-09-25
 
 ## Tracker
 
@@ -41,3 +41,5 @@ Plan-level Status header: ACTIVE while any row is open, DONE when all rows DONE,
 - [watchtower/archive/20260923-thread-attach-jev-walkback-status](watchtower/archive/20260923-thread-attach-jev-walkback-status)
 - [watchtower/archive/20260923-thread-export-qmd-search](watchtower/archive/20260923-thread-export-qmd-search)
 - [watchtower/archive/20260924-recap-log-turn-diff-pr-attach](watchtower/archive/20260924-recap-log-turn-diff-pr-attach)
+
+- Archived: 2026-09-25 -> watchtower/archive/20260924-snapshot-size-cap-ci-log-pending/

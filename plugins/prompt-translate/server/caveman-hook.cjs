@@ -1,0 +1,143 @@
+#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
+const crypto = require("node:crypto");
+const { execFileSync } = require("node:child_process");
+const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+const modes = new Set([
+  "follow-agent",
+  "lite",
+  "full",
+  "ultra",
+  "wenyan-lite",
+  "wenyan-full",
+  "wenyan-ultra",
+]);
+const digest = (text) =>
+  crypto.createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
+function run(data, env = process.env) {
+  const agentId = env.PASEO_AGENT_ID;
+  if (!uuid.test(agentId || "") || typeof data.prompt !== "string") return {};
+  const root = path.join(
+    env.PASEO_HOME || path.join(os.homedir(), ".paseo"),
+    "plugin-data/prompt-translate",
+  );
+  const dir = path.join(root, "agents", agentId);
+  if (!fs.existsSync(path.join(dir, "mode.json"))) return {};
+  const runtime = JSON.parse(fs.readFileSync(path.join(root, "hook-runtime.json"), "utf8"));
+  const selected = JSON.parse(fs.readFileSync(path.join(dir, "mode.json"), "utf8"));
+  const hash = digest(data.prompt);
+  let choice = selected;
+  let consumed;
+  const pending = path.join(dir, "pending");
+  const now = Date.now();
+  for (const name of fs.existsSync(pending) ? fs.readdirSync(pending).sort() : []) {
+    if (!name.endsWith(".json")) continue;
+    const file = path.join(pending, name);
+    let value;
+    try {
+      value = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      continue;
+    }
+    if (now - value.createdAt > 86400000) {
+      fs.unlinkSync(file);
+      fs.rmSync(file.replace(/\.json$/, ".queue"), { force: true });
+      continue;
+    }
+    if (value.hash === hash) {
+      choice = value;
+      consumed = file;
+      break;
+    }
+  }
+  if (!modes.has(choice.mode)) throw new Error("Invalid Caveman mode");
+  const hookDir = path.join(runtime.cavemanRoot, "src/hooks");
+  const { parseModeChange } = require(path.join(hookDir, "caveman-parse.js"));
+  const config = require(path.join(hookDir, "caveman-config.js"));
+  // Parsing and mode rules belong to Caveman, including explicit off/natural-language commands.
+  const userPrompt = data.prompt.replace(/^\$caveman\b/, "/caveman");
+  const change = parseModeChange(userPrompt, {
+    getDefaultMode: () => config.getDefaultMode(data.cwd),
+  });
+  const requested = choice.mode === "follow-agent" ? "off" : choice.mode;
+  const hookPrompt = change ? userPrompt : `/caveman ${requested}`;
+  const nativeDir = path.join(dir, "native");
+  fs.mkdirSync(nativeDir, { recursive: true });
+  const result = execFileSync(process.execPath, [path.join(hookDir, "caveman-mode-tracker.js")], {
+    input: JSON.stringify({ ...data, session_id: data.session_id || agentId, prompt: hookPrompt }),
+    env: { ...env, CLAUDE_CONFIG_DIR: nativeDir },
+    timeout: 4000,
+    maxBuffer: 1024 * 1024,
+    encoding: "utf8",
+  });
+  const output = result.trim() ? JSON.parse(result) : {};
+  const active = config.resolveActiveMode(nativeDir, data.session_id || agentId);
+  const context = [
+    "For this turn, replace earlier Caveman mode and language overrides with the mode below. Explicit language requests in the current user prompt take priority.",
+  ];
+  if (active) context.push(`Use Caveman ${active} for this turn.`);
+  if (String(active).startsWith("wenyan"))
+    context.push(
+      "Respond in literary Chinese for this turn unless the user explicitly requests another language.",
+    );
+  if (output.hookSpecificOutput?.additionalContext)
+    context.push(output.hookSpecificOutput.additionalContext);
+  if (!active)
+    context.push(
+      "Normal mode. Stop caveman. Reset earlier Caveman style and Wenyan language instructions. Follow the agent's normal response style and the current request's language unless explicitly requested otherwise.",
+    );
+  if (!change && !String(active).startsWith("wenyan")) {
+    if (choice.replyVietnamese)
+      context.push(
+        "Reply in Vietnamese unless the current request explicitly asks for another language. This replaces earlier Wenyan language choices.",
+      );
+    else
+      context.push(
+        "Use the current request's language unless explicitly requested otherwise; replace any earlier Wenyan language choice.",
+      );
+  }
+  if (!change && String(active).startsWith("wenyan") && choice.chineseScript === "simplified")
+    context.push(
+      "Use Simplified Chinese characters (简体字) unless the current request explicitly asks for another script.",
+    );
+  const additionalContext = context.join("\n\n");
+  fs.writeFileSync(
+    path.join(dir, "last-hook.json"),
+    JSON.stringify({
+      agentId,
+      sessionId: data.session_id,
+      mode: active || "off",
+      selectedMode: choice.mode,
+      source: consumed ? "turn" : "agent",
+      hash,
+      contextBytes: Buffer.byteLength(additionalContext),
+      at: new Date().toISOString(),
+    }),
+  );
+  if (consumed) {
+    fs.unlinkSync(consumed);
+    fs.rmSync(consumed.replace(/\.json$/, ".queue"), { force: true });
+  }
+  return {
+    ...output,
+    hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext },
+  };
+}
+module.exports = { run, digest };
+if (require.main === module) {
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    input += chunk;
+  });
+  process.stdin.on("end", () => {
+    try {
+      process.stdout.write(JSON.stringify(run(JSON.parse(input))));
+    } catch (error) {
+      process.stderr.write(`prompt-translate hook: ${error.message.split("\n")[0]}\n`);
+      process.exitCode = 2;
+    }
+  });
+}
