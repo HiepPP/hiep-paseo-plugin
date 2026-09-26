@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
 import { gitAction, joinPrompts, parsePrompts } from "../shared/prompts";
+import { selectionAllowed } from "../shared/next-prompts";
 import { Store } from "./store";
 
 export type Row = {
@@ -49,9 +50,11 @@ export class Engine {
     // Only the last assistant response can offer a continuation, never tool output.
     const row = current.rows.findLast((r, i) => i > user && r.type === "assistant_message");
     if (!row?.text) return [];
-    return parsePrompts(row.text).flatMap(({ block, prompts, whys }, b) =>
+    return parsePrompts(row.text).flatMap(({ block, prompts, whys, declaration }, b) =>
       prompts.map((text, p) => {
-        const key = hash(JSON.stringify([scope.agentId, current.epoch, row.id, b, p, text]));
+        const identity = [scope.agentId, current.epoch, row.id, b, p, text];
+        if (declaration) identity.push(block);
+        const key = hash(JSON.stringify(identity));
         return {
           key,
           block,
@@ -60,6 +63,16 @@ export class Engine {
           source: row.text!,
           timestamp: row.timestamp,
           state: this.store.get(scope.agentId).handled[key] ?? "ready",
+          ...(declaration
+            ? {
+                selection: {
+                  id: declaration.prompts[p].id,
+                  blockKey: hash(JSON.stringify([scope.agentId, current.epoch, row.id, b, block])),
+                  exclusiveGroups: declaration.exclusiveGroups,
+                  allowedCombinations: declaration.allowedCombinations,
+                },
+              }
+            : {}),
         };
       }),
     );
@@ -132,7 +145,7 @@ export class Engine {
         throw new Error("Conversation changed.");
       const entry = this.store.get(scope.agentId);
       const all = this.candidates(scope, current);
-      const picked = keys.flatMap((k) => all.filter((c) => c.key === k && c.state === "ready"));
+      const picked = all.filter((c) => keys.includes(c.key) && c.state === "ready");
       if (
         current.busy ||
         !keys.length ||
@@ -147,6 +160,8 @@ export class Engine {
           throw new Error("Git suggestions require an individual manual send.");
         text = actions[0]!.prompt;
       }
+      if (!selectionAllowed(picked))
+        throw new Error("Prompt combination is not declared or is mutually exclusive.");
       if (
         automatic &&
         (!entry.enabled ||

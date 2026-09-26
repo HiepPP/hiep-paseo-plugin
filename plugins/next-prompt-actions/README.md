@@ -1,7 +1,9 @@
 # Next prompt actions
 
-Send a fenced `prompt:` suggestion under `What Next` or `Next Steps` directly from its block.
-Each prompt renders as its own card with Edit and Send; the raw fence is hidden, not removed.
+Send suggestions under `What Next`, `What's Next`, or `Next Steps` directly from their blocks.
+Legacy fenced `prompt:` suggestions keep individual Edit and Send controls. They cannot be sent together.
+Structured `next-prompts` v1 blocks with several suggestions use selection controls; one suggestion keeps direct Edit and Send.
+The raw fence is hidden, not removed.
 Explicit Git suggestions replace Send with one action: Commit sends `/commit --no-push`,
 Commit & Push sends `/commit` only when push is explicitly requested, and Push sends the
 original push-only suggestion without invoking the commit skill. English and Vietnamese action
@@ -9,17 +11,69 @@ phrases are recognized conservatively; mentions such as "Review commit" and nega
 No-push constraints take precedence. The original scope and constraints are preserved, with a reminder
 to preserve unrelated work. Existing leading `/commit` or `$commit` commands are normalized once.
 All actions share Send's busy, stale, and duplicate guards. Git actions require individual manual
-clicks; their blocks omit Edit all and Send all, and Jev does not auto-run them.
+clicks; their blocks keep individual controls, and Jev does not auto-run them.
 An optional `why:` line under a prompt shows as its reason and is never sent.
-Several ordinary prompts also get Edit all and Send all for one numbered message. The composer draft is preserved.
+Send preserves the composer draft. Edit replaces it with the selected prompt text for manual review.
 
-![Two prompt cards, each with a why reason and Edit and Send, above Edit all and Send all.](../../docs/images/next-prompt-actions.png)
+## Recap and next-step layout
 
-Captured from Paseo desktop 0.9.1 using sample suggestions.
+A suggestion block under What Next becomes one panel ([design](../../docs/designs/recap-next-panel-2026-09-25/panel-v3.html), [rules](../../docs/designs/recap-next-panel-2026-09-25/TASTE.md)).
+The panel shows a directly preceding Recap (branch, commit status, and work summary), the What Next title and intro, and the suggestions.
+A Recap with exactly the Branch, Did, and Commit/push fields joins the panel, or shows as a compact strip when no panel follows.
+Other Recap shapes keep their original rendering.
+Native Markdown is hidden in place, not removed, and returns when the plugin is disabled.
+
+- Current reply: the panel has controls. One suggestion gets direct Edit and Send. Several suggestions separate exclusive
+  choices from additional suggestions, with a shared bar for the count, Edit selected, and Send selected.
+  No alternatives or default selections are invented.
+- Earlier replies: once a newer turn starts, the server no longer offers their suggestions. Their panels stay readable
+  but have no buttons or inputs. This applies only when the nearest heading above the block is What Next or Next Steps.
+
+Paseo renders each Markdown block of a reply as its own history row, so the panel joins rows that share a message ID.
+Rows mounted while scrolling are folded before paint to avoid layout jumps in the virtualized history.
+
+## Structured suggestions
+
+Use one JSON fence with the language `next-prompts`. The first suggestion is the recommended next step.
+
+````markdown
+## What Next
+
+```next-prompts
+{
+  "version": 1,
+  "prompts": [
+    { "id": "implement", "prompt": "Implement the settings layout.", "why": "Apply the agreed design." },
+    { "id": "review", "prompt": "Review the settings layout. Do not change code." },
+    { "id": "risks", "prompt": "List remaining risks." }
+  ],
+  "exclusiveGroups": [["implement", "review"]],
+  "allowedCombinations": [["implement", "risks"], ["review", "risks"]]
+}
+```
+````
+
+- `version` must be `1`. Each prompt has a unique lowercase ID, exact `prompt` text, and an optional `why`.
+- `exclusiveGroups` declare disjoint radio groups. Each group permits at most one selection, not a required selection.
+- Other suggestions use checkboxes. Nothing is selected automatically. Clear selection resets all controls.
+- `allowedCombinations` lists exact permitted sets of IDs. Subsets, supersets, and transitive combinations are not inferred.
+- Both relationship arrays may be omitted; the default is no permitted bulk sends. Single sends remain available.
+- The server revalidates every selection from the current reply. Separate fences cannot be combined.
+- Selected prompts are sent in authored order as one numbered message. Only `prompt` text is sent, never IDs, relationships, or reasons.
+- Busy, stale, duplicate, uncertain-send, and individual Git-action guards still apply. Blocks containing Git actions use individual controls.
+- Relationships declare intent; they do not prove semantic compatibility, grant permissions, or authorize parallel execution.
+
+Unknown fields, versions, invalid references, overlapping exclusive groups, duplicate IDs or sets, and contradictory declarations reject the entire block.
+Malformed, partial, or unsupported blocks remain visible as plain code without plugin controls.
+Limits: 64 KiB per JSON block, 1–20 prompts, 16,000 characters per prompt, 2,000 per reason,
+64 characters per ID (`[a-z][a-z0-9-]*`), 20 exclusive groups, and 64 allowed combinations.
+Each group or combination contains 2–20 distinct IDs. Legacy blocks retain their existing parser limits.
 
 ## Compatibility
 
-Paseo 0.8.x and 0.9.0-beta.2 desktop only. The user approved this private DOM adapter; it does not edit Paseo source.
+Desktop only; the installed runtime used for this change is Paseo 0.9.1.
+The manifest also permits 0.8.x and 0.9.0-beta.2; this change was not runtime-tested on those versions.
+The user approved this private DOM adapter; it does not edit Paseo source.
 It reads native Markdown markers and React ancestor props for host, workspace, message, and agent identity.
 Unknown shapes, partial streams, incomplete latest turns, stale messages, and wrong hosts fail closed.
 Browser and native mobile clients receive no DOM contribution.

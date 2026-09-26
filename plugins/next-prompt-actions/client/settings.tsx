@@ -43,7 +43,7 @@ export function SendSettingsScreen({ theme }: PluginSurfaceProps) {
       <SettingsCard>
         <SettingsSwitch
           label="Back to Board after send"
-          hint="After Send or Send all succeeds, open the Board. Requires the Board plugin."
+          hint="Open the Board when sending a suggestion. Requires the Board plugin."
           error={settings.saveError}
           value={values.backToBoard}
           disabled={settings.saving}

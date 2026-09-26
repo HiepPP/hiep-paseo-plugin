@@ -5,6 +5,107 @@ import { binding, install, type Node, type Binding } from "../client/web";
 import type { Snapshot } from "../shared/contracts";
 import { Engine, type Current } from "../server/engine";
 import { Store } from "../server/store";
+test("v1 radio groups and checkboxes enforce selection, preview exact prompts, send once and clean up", async () => {
+  const value = {
+    version: 1,
+    prompts: [
+      { id: "implement", prompt: "Implement the layout.", why: "Apply the design." },
+      { id: "review", prompt: "Review only. Do not change code." },
+      { id: "risks", prompt: "List remaining risks." },
+    ],
+    exclusiveGroups: [["implement", "review"]],
+    allowedCombinations: [["review", "risks"]],
+  };
+  const block = JSON.stringify(value);
+  const message = "## What Next\n~~~next-prompts\n" + block + "\n~~~";
+  const current: Current = {
+    epoch: "v1",
+    complete: true,
+    busy: false,
+    rows: [
+      { type: "user_message", id: "0", text: "Suggest next steps.", timestamp: 1 },
+      { type: "assistant_message", id: "1", text: message, timestamp: 100 },
+    ],
+  };
+  const sent: string[] = [];
+  const engine = new Engine(
+    new Store(),
+    {
+      read: async () => structuredClone(current),
+      send: async (_scope, text) => {
+        sent.push(text);
+      },
+    },
+    async () => false,
+  );
+  const { document, window } = parseHTML(
+    '<html><head></head><body><textarea data-composer-input="">draft</textarea><div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code"></span><button id="copy">Copy</button></div></div></body></html>',
+  );
+  document.querySelector('[data-paseo-markdown-tag="code"]')!.textContent = block;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    {
+      inspect: (scope) => engine.inspect(scope),
+      send: async (scope, key) => ({ sent: await engine.send(scope, key) }),
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message }),
+  );
+  try {
+    await pause();
+    const radios = document.querySelectorAll('input[type="radio"]');
+    const checkbox = document.querySelector('input[type="checkbox"]')!;
+    assert.equal(radios.length, 2);
+    assert.ok(checkbox);
+    assert.equal(radios[0].closest("fieldset"), radios[1].closest("fieldset"));
+    assert.notEqual(radios[0].closest("fieldset"), checkbox.closest("fieldset"));
+    assert.equal(
+      checkbox.closest("fieldset")!.querySelector("legend")!.textContent,
+      "Additional suggestions",
+    );
+    const send = document.querySelector(".npa-selection-send")!;
+    assert.equal(send.disabled, true, "no implicit selection");
+    const select = (node: typeof checkbox) => {
+      node.checked = true;
+      node.dispatchEvent(new window.Event("change"));
+    };
+    select(radios[0]);
+    select(checkbox);
+    assert.equal(send.textContent, "Send selected (2)");
+    assert.equal(send.disabled, true, "undeclared combination is blocked");
+    document.querySelector(".npa-selection-edit")!.dispatchEvent(new window.Event("click"));
+    send.dispatchEvent(new window.Event("click"));
+    assert.equal(document.querySelector("textarea")!.value, "draft");
+    assert.deepEqual(sent, []);
+    select(radios[1]);
+    assert.equal(radios[0].checked, false, "exclusive choice replaced");
+    assert.equal(radios[1].checked, true);
+    assert.equal(send.disabled, false);
+    document.querySelector(".npa-selection-edit")!.dispatchEvent(new window.Event("click"));
+    assert.equal(
+      document.querySelector("textarea")!.value,
+      "1. Review only. Do not change code.\n2. List remaining risks.",
+    );
+    send.dispatchEvent(new window.Event("click"));
+    send.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.deepEqual(sent, ["1. Review only. Do not change code.\n2. List remaining risks."]);
+    assert.equal(send.disabled, true);
+    assert.equal(document.querySelector('[data-paseo-markdown-tag="code"]')!.textContent, block);
+    assert.ok(document.querySelector("#copy"));
+  } finally {
+    cleanup();
+    engine.close();
+    assert.equal(document.querySelector("[data-next-prompt-actions]"), null);
+    assert.equal(document.querySelector("[data-npa-block]"), null);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
 
 const context: Binding = {
   agentId: "a",
@@ -80,7 +181,7 @@ test("DOM button preserves code/copy/draft; sends once and cleans up on disable"
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
-test("multiple prompts render one card each plus Send all, and hide the raw fence", async () => {
+test("legacy prompts render individual controls without bulk actions and hide the raw fence", async () => {
   const block = "prompt: First.\nprompt: Second.";
   const many: Snapshot = {
     ...snapshot,
@@ -121,8 +222,8 @@ test("multiple prompts render one card each plus Send all, and hide the raw fenc
     );
     assert.equal(document.querySelectorAll(".npa-why").length, 1);
     assert.equal(document.querySelector(".npa-why strong")!.textContent, "this");
-    assert.equal(document.querySelectorAll(".npa-row .npa-edit").length, 3);
-    assert.equal(document.querySelector(".npa-all .npa-send")!.textContent, "Send all");
+    assert.equal(document.querySelectorAll(".npa-row .npa-edit").length, 2);
+    assert.equal(document.querySelector(".npa-all"), null);
     const pre = document.querySelector('[data-paseo-markdown-tag="pre"]')!;
     assert.equal(pre.getAttribute("data-npa-block"), "multiple");
     assert.match(
@@ -131,9 +232,7 @@ test("multiple prompts render one card each plus Send all, and hide the raw fenc
     );
     document.querySelectorAll(".npa-send")[1].dispatchEvent(new window.Event("click"));
     await pause();
-    document.querySelector(".npa-all .npa-send")!.dispatchEvent(new window.Event("click"));
-    await pause();
-    assert.deepEqual(sent, ["key1", ["key0", "key1"]]);
+    assert.deepEqual(sent, ["key1"]);
   } finally {
     cleanup();
     if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
@@ -572,6 +671,334 @@ test("streaming DOM changes reuse the last timeline read until a prompt block ch
       '<div data-testid="assistant-message"><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code">prompt: Next step.</span></div></div>';
     await pause();
     assert.equal(reads, before + 1, "a new prompt block reads the timeline once");
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("one structured suggestion uses direct Edit and Send without a selection step", async () => {
+  const block = JSON.stringify({
+    version: 1,
+    prompts: [{ id: "verify", prompt: "Verify the layout." }],
+    exclusiveGroups: [],
+    allowedCombinations: [],
+  });
+  const message = `## What Next\n\`\`\`next-prompts\n${block}\n\`\`\``;
+  const candidate = {
+    ...snapshot.candidates[0],
+    block,
+    source: message,
+    text: "Verify the layout.",
+    selection: { blockKey: "single", id: "verify", exclusiveGroups: [], allowedCombinations: [] },
+  };
+  const { document, window } = parseHTML(
+    '<html><head></head><body><textarea data-composer-input="">draft</textarea><div data-testid="assistant-message"><div data-paseo-markdown-tag="h2">What Next</div><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code"></span></div></div></body></html>',
+  );
+  document.querySelector('[data-paseo-markdown-tag="code"]')!.textContent = block;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const sent: (string | string[])[] = [];
+  const cleanup = install(
+    {
+      inspect: async () => ({ ...snapshot, candidates: [candidate] }),
+      send: async (_, key) => {
+        sent.push(key);
+        return { sent: true };
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message }),
+  );
+  try {
+    await pause();
+    assert.equal(document.querySelectorAll("input").length, 0);
+    assert.equal(document.querySelectorAll(".npa-edit").length, 1);
+    assert.equal(document.querySelectorAll(".npa-send").length, 1);
+    document.querySelector(".npa-edit")!.dispatchEvent(new window.Event("click"));
+    assert.equal(document.querySelector("textarea")!.value, candidate.text);
+    document.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.deepEqual(sent, [candidate.key]);
+    assert.ok(document.querySelector("[data-npa-next-heading]"));
+  } finally {
+    cleanup();
+    assert.equal(document.querySelector("[data-npa-next-heading]"), null);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("Recap, What Next, and intro fold into one prompt panel and restore exactly", async () => {
+  const block = JSON.stringify({
+    version: 1,
+    prompts: [{ id: "verify", prompt: "Verify the layout." }],
+    exclusiveGroups: [],
+    allowedCombinations: [],
+  });
+  const message = `## Recap\n- Branch: \`main\`\n- Did: Read the [report](/report).\n- Commit/push: none\n\n## What Next\nCheck the panel.\n\`\`\`next-prompts\n${block}\n\`\`\``;
+  const item = (value: string) =>
+    `<div data-paseo-markdown-tag="li"><span data-paseo-markdown-ignore="true" data-paseo-markdown-list-marker="true">•</span><div><span>${value}</span></div></div>`;
+  const candidate = {
+    ...snapshot.candidates[0],
+    block,
+    source: message,
+    text: "Verify the layout.",
+    selection: { blockKey: "panel", id: "verify", exclusiveGroups: [], allowedCombinations: [] },
+  };
+  const { document, window } = parseHTML(
+    `<html><head></head><body><textarea data-composer-input="">draft</textarea><div data-testid="assistant-message"><div data-paseo-markdown-tag="h2"><span>Recap</span></div><div data-paseo-markdown-tag="ul">${item('Branch: <span data-paseo-markdown-tag="code">main</span>')}${item('Did: Read the <a href="/report">report</a>.')}${item("Commit/push: none")}</div><div data-paseo-markdown-tag="h2"><span>What Next</span></div><div data-paseo-markdown-tag="p"><span>Check the panel.</span></div><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code"></span></div></div></body></html>`,
+  );
+  document.querySelector(
+    '[data-paseo-markdown-tag="pre"] [data-paseo-markdown-tag="code"]',
+  )!.textContent = block;
+  const assistant = document.querySelector('[data-testid="assistant-message"]')!;
+  const before = assistant.innerHTML;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const sent: (string | string[])[] = [];
+  const cleanup = install(
+    {
+      inspect: async () => ({ ...snapshot, candidates: [candidate] }),
+      send: async (_, key) => {
+        sent.push(key);
+        return { sent: true };
+      },
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message }),
+  );
+  try {
+    await pause();
+    const panel = document.querySelector("[data-next-prompt-actions]")!;
+    const recap = panel.querySelector(".npa-recap")!;
+    assert.equal(recap.querySelector(".npa-kicker")!.textContent, "Recap");
+    assert.equal(recap.querySelector(".npa-branch")!.textContent!.trim(), "main");
+    const commit = recap.querySelector(".npa-commit")!;
+    assert.equal(commit.textContent!.trim(), "No commit");
+    assert.equal(commit.getAttribute("aria-label"), "Commit/push: none");
+    assert.equal(recap.querySelector(".npa-did")!.textContent!.trim(), "Read the report.");
+    assert.equal(
+      recap.nextElementSibling!.querySelector(".npa-next-title")!.textContent,
+      "What Next",
+    );
+    assert.equal(panel.querySelector("a")!.getAttribute("href"), "/report");
+    assert.equal(panel.querySelector(".npa-next-title")!.textContent, "What Next");
+    assert.equal(panel.querySelector(".npa-next-intro")!.textContent!.trim(), "Check the panel.");
+    assert.equal(panel.querySelectorAll("[data-paseo-markdown-tag]").length, 0);
+    assert.equal(document.querySelectorAll("[data-npa-folded]").length, 4);
+    document.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+    await pause();
+    assert.deepEqual(sent, [candidate.key]);
+  } finally {
+    cleanup();
+    assert.equal(assistant.innerHTML, before);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("Paseo history rows of one reply fold into the prompt panel and restore exactly", async () => {
+  const block = JSON.stringify({
+    version: 1,
+    prompts: [{ id: "verify", prompt: "Verify the layout." }],
+    exclusiveGroups: [],
+    allowedCombinations: [],
+  });
+  const message = `Intro.\n\n## Recap\n- Branch: \`main\`\n- Did: Read it.\n- Commit/push: pushed main\n\n## What Next\nCheck the panel.\n\`\`\`next-prompts\n${block}\n\`\`\``;
+  const item = (value: string) =>
+    `<div data-paseo-markdown-tag="li"><div data-paseo-markdown-ignore="true" data-paseo-markdown-list-marker="true">•</div><div>${value}</div></div>`;
+  const row = (index: number, content: string) =>
+    `<div data-history-row-id="m1:block:${index}" data-message-id="m1"><div data-message-text="true" data-testid="assistant-message">${content}</div></div>`;
+  const candidate = {
+    ...snapshot.candidates[0],
+    block,
+    source: message,
+    text: "Verify the layout.",
+    selection: { blockKey: "rows", id: "verify", exclusiveGroups: [], allowedCombinations: [] },
+  };
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div id="list">${row(0, '<div data-paseo-markdown-tag="p"><div>Intro.</div></div>')}${row(1, `<div data-paseo-markdown-tag="h2"><div>Recap</div></div><div data-paseo-markdown-tag="ul">${item('Branch: <span data-paseo-markdown-tag="code">main</span>')}${item("Did: Read it.")}${item("Commit/push: pushed main")}</div>`)}${row(2, '<div data-paseo-markdown-tag="h2"><div>What Next</div></div><div data-paseo-markdown-tag="p"><div>Check the panel.</div></div>')}${row(3, '<div data-paseo-markdown-tag="pre"><div data-paseo-markdown-tag="code"></div></div>')}</div></body></html>`,
+  );
+  document.querySelector(
+    '[data-paseo-markdown-tag="pre"] [data-paseo-markdown-tag="code"]',
+  )!.textContent = block;
+  const list = document.querySelector("#list")!;
+  const before = list.innerHTML;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    {
+      inspect: async () => ({ ...snapshot, candidates: [candidate] }),
+      send: async () => ({ sent: true }),
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message }),
+  );
+  try {
+    await pause();
+    const panel = document.querySelector("[data-next-prompt-actions]")!;
+    assert.equal(panel.querySelector(".npa-branch")!.textContent!.trim(), "main");
+    const commit = panel.querySelector(".npa-commit.npa-ok")!;
+    assert.equal(commit.textContent!.trim(), "pushed main");
+    assert.equal(commit.getAttribute("aria-label"), "Commit/push: pushed main");
+    assert.equal(panel.querySelector(".npa-next-title")!.textContent, "What Next");
+    assert.equal(panel.querySelector(".npa-next-intro")!.textContent!.trim(), "Check the panel.");
+    const folded = (index: number) =>
+      document
+        .querySelector(`[data-history-row-id="m1:block:${index}"]`)!
+        .getAttribute("data-npa-folded");
+    assert.deepEqual([0, 1, 2, 3].map(folded), [null, "true", "true", null]);
+  } finally {
+    cleanup();
+    assert.equal(list.innerHTML, before);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("earlier replies keep a read-only panel without actions after a newer turn", async () => {
+  const code = "prompt: Verify the layout.\nwhy: Pick this to **confirm it**, because it changed.";
+  const row = (id: string, index: number, content: string) =>
+    `<div data-history-row-id="${id}:block:${index}" data-message-id="${id}"><div data-message-text="true" data-testid="assistant-message">${content}</div></div>`;
+  const pre = `<div data-paseo-markdown-tag="pre"><div data-paseo-markdown-tag="code">${code}</div></div>`;
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div id="list">${row("old", 0, '<div data-paseo-markdown-tag="h2"><div>What Next</div></div>')}${row("old", 1, pre)}${row("loose", 0, '<div data-paseo-markdown-tag="h2"><div>Notes</div></div>')}${row("loose", 1, pre)}</div></body></html>`,
+  );
+  const list = document.querySelector("#list")!;
+  const before = list.innerHTML;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    { inspect: async () => ({ ...snapshot, candidates: [] }), send: async () => ({ sent: true }) },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message: "older reply" }),
+  );
+  try {
+    await pause();
+    const panels = document.querySelectorAll("[data-next-prompt-actions]");
+    assert.equal(panels.length, 1);
+    const panel = panels[0];
+    assert.ok(panel.closest('[data-message-id="old"]'));
+    assert.equal(panel.getAttribute("data-npa-readonly"), "true");
+    assert.equal(panel.querySelector(".npa-next-title")!.textContent, "What Next");
+    assert.equal(panel.querySelector(".npa-label")!.firstChild!.textContent, "Verify the layout.");
+    assert.equal(panel.querySelector(".npa-why strong")!.textContent, "confirm it");
+    assert.equal(panel.querySelectorAll("button, input").length, 0);
+  } finally {
+    cleanup();
+    assert.equal(list.innerHTML, before);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("rows mounted by the virtualized history fold before the timeline read returns", async () => {
+  const code = "prompt: Continue the review.";
+  const row = (index: number, content: string) =>
+    `<div data-history-row-id="v:block:${index}" data-message-id="v"><div data-message-text="true" data-testid="assistant-message">${content}</div></div>`;
+  const item = (value: string) =>
+    `<div data-paseo-markdown-tag="li"><div data-paseo-markdown-ignore="true" data-paseo-markdown-list-marker="true">•</div><div>${value}</div></div>`;
+  const { document, window } = parseHTML(
+    '<html><head></head><body><div id="list"></div></body></html>',
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    // The read never settles: only the synchronous mount path can produce the panel.
+    { inspect: () => new Promise(() => {}), send: async () => ({ sent: true }) },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message: "older reply" }),
+  );
+  try {
+    const list = document.querySelector("#list")!;
+    list.insertAdjacentHTML(
+      "beforeend",
+      row(1, '<div data-paseo-markdown-tag="h2"><div>What Next</div></div>') +
+        row(
+          2,
+          `<div data-paseo-markdown-tag="pre"><div data-paseo-markdown-tag="code">${code}</div></div>`,
+        ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    const panel = list.querySelector("[data-next-prompt-actions]");
+    assert.ok(panel, "panel renders in the mutation callback");
+    assert.equal(panel!.querySelector(".npa-recap"), null);
+    list.insertAdjacentHTML(
+      "afterbegin",
+      row(
+        0,
+        `<div data-paseo-markdown-tag="h2"><div>Recap</div></div><div data-paseo-markdown-tag="ul">${item("Branch: main")}${item("Did: Read it.")}${item("Commit/push: none")}</div>`,
+      ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.ok(list.querySelector("[data-next-prompt-actions] .npa-recap"), "late rows fold in");
+    assert.equal(
+      list.querySelector('[data-history-row-id="v:block:0"]')!.getAttribute("data-npa-folded"),
+      "true",
+    );
+  } finally {
+    cleanup();
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("a timeline read that started before rows mounted does not clear their panels", async () => {
+  const row = (id: string, index: number, content: string) =>
+    `<div data-history-row-id="${id}:block:${index}" data-message-id="${id}"><div data-message-text="true" data-testid="assistant-message">${content}</div></div>`;
+  const reply = (id: string) =>
+    row(id, 0, '<div data-paseo-markdown-tag="h2"><div>What Next</div></div>') +
+    row(
+      id,
+      1,
+      `<div data-paseo-markdown-tag="pre"><div data-paseo-markdown-tag="code">prompt: Continue ${id}.</div></div>`,
+    );
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div id="list">${reply("a")}</div></body></html>`,
+  );
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  let settle: (value: Snapshot) => void = () => {};
+  const cleanup = install(
+    {
+      inspect: () => new Promise<Snapshot>((resolve) => (settle = resolve)),
+      send: async () => ({ sent: true }),
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message: "older reply" }),
+  );
+  try {
+    await pause(); // the scan now waits on the read
+    document.querySelector("#list")!.insertAdjacentHTML("beforeend", reply("b"));
+    await Promise.resolve();
+    const panelB = () => document.querySelector('[data-message-id="b"] [data-next-prompt-actions]');
+    assert.ok(panelB(), "mount path renders b");
+    settle({ ...snapshot, candidates: [] });
+    await pause();
+    assert.ok(panelB(), "the earlier read keeps b's panel");
+    assert.equal(document.querySelectorAll("[data-next-prompt-actions]").length, 2);
   } finally {
     cleanup();
     if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);

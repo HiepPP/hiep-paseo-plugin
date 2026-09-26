@@ -53,13 +53,11 @@ This capture shows the missing-file state when the repository has no active
 
 ## Read the next step, then send it
 
-Next prompt actions turns each suggested prompt into a card with **Edit** and
-**Send**, plus an optional reason. Several prompts add **Edit all** and
-**Send all**. Continue in the same conversation without copying and pasting.
-
-![Two prompt cards, each with a why reason and Edit and Send, above Edit all and Send all.](docs/images/next-prompt-actions.png)
-
-Sample capture, September 23, desktop 0.9.1.
+Next prompt actions turns Recap into a compact branch, summary, and commit-status strip.
+Single suggestions get direct **Edit** and **Send** controls.
+Structured `next-prompts` v1 suggestions use radio groups for alternative directions
+and checkboxes for other steps. **Edit selected** and **Send selected** combine only
+explicitly permitted selections. Continue in the same conversation without copying and pasting.
 
 Optional Jev auto-run lives in Command Center and starts off. Desktop only;
 uses a private adapter for the existing Markdown blocks.

@@ -1,5 +1,6 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
+import { selectionSchema } from "./next-prompts";
 
 export const scopeSchema = z.object({
   serverId: z.string(),
@@ -15,6 +16,7 @@ export const candidateSchema = z.object({
   source: z.string(),
   timestamp: z.number(),
   state: z.enum(["ready", "sending", "sent", "unknown"]),
+  selection: selectionSchema.optional(),
 });
 export const snapshotSchema = z.object({
   enabled: z.boolean(),

@@ -91,7 +91,7 @@ test("manual sends preserve exact text, and concurrent requests submit once", as
   assert.equal(f.sent[0].text, "Report results.");
   await assert.rejects(f.engine.send(scope, key));
 });
-test("Send all submits every prompt once as one numbered message", async () => {
+test("legacy multiple prompts require individual sends", async () => {
   const f = fixture();
   f.current.rows[1].text =
     "## Next Steps\n```\nprompt: One\nwhy: Reason.\nprompt: Two\n  line\n```";
@@ -102,14 +102,12 @@ test("Send all submits every prompt once as one numbered message", async () => {
   );
   const keys = candidates.map((c) => c.key);
   await assert.rejects(f.engine.send(scope, [keys[0], keys[0]]));
-  await f.engine.send(scope, keys);
-  assert.deepEqual(
-    f.sent.map((s) => s.text),
-    ["1. One\n2. Two\n     line"],
-  );
+  await assert.rejects(f.engine.send(scope, keys), /combination/);
+  assert.deepEqual(f.sent, []);
+  await f.engine.send(scope, keys[0]);
   const states = (await f.engine.inspect(scope)).candidates.map((c) => c.state);
-  assert.deepEqual(states, ["sent", "sent"]);
-  await assert.rejects(f.engine.send(scope, keys[1]));
+  assert.deepEqual(states, ["sent", "ready"]);
+  await assert.rejects(f.engine.send(scope, keys[0]));
 });
 test("manual Git sends resolve their action server-side and share Send reservations", async () => {
   const f = fixture();

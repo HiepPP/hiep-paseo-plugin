@@ -1,0 +1,259 @@
+import type { Document, Node } from "./web";
+
+const TAG = "data-paseo-markdown-tag";
+const blocks = new Set(["ul", "ol", "p", "pre", "blockquote", "table", "hr"]);
+const heading = /^h[1-6]$/;
+const next = /^what(?:['’]s)? next$|^next steps$/i;
+
+export const recapStyles = `
+[data-npa-recap-heading] {font-size:22px!important;line-height:1.3!important;margin-top:20px!important;margin-bottom:12px!important;padding-bottom:0!important;border-bottom-width:0!important;}
+[data-npa-recap-heading] * {font-size:inherit!important;line-height:inherit!important;}
+[data-npa-recap] {display:grid!important;grid-template-columns:auto minmax(0,max-content) auto;justify-content:start;align-items:baseline;gap:0!important;margin:0!important;padding:0 0 20px!important;border-bottom:1px solid color-mix(in srgb,currentColor 14%,transparent);}
+[data-npa-recap-field] {display:block!important;min-width:0!important;margin:0!important;padding:0 24px!important;border-left:1px solid color-mix(in srgb,currentColor 16%,transparent);font:14px/1.6 system-ui!important;overflow-wrap:anywhere;text-wrap:pretty;}
+[data-npa-recap-field="did"] {max-width:68ch;}
+[data-npa-recap-field]:first-child {padding-left:0!important;border-left:0;}
+[data-npa-recap-field]:last-child {padding-right:0!important;}
+[data-npa-recap-field] * {font-size:inherit!important;line-height:inherit!important;}
+[data-npa-recap-field] [data-paseo-markdown-list-marker] {display:none!important;}
+[data-npa-recap-field] [data-paseo-markdown-tag="p"] {margin:0!important;}
+[data-npa-recap-field] [data-paseo-markdown-tag="code"] {border-radius:6px;padding:1px 5px!important;background:color-mix(in srgb,currentColor 6%,transparent)!important;}
+[data-npa-folded] {display:none!important;}
+@media(max-width:800px) {
+  [data-npa-recap] {grid-template-columns:minmax(0,1fr);gap:10px!important;}
+  [data-npa-recap-field] {padding:0!important;border-left:0;}
+}
+`;
+
+/** Decorate known Markdown shapes without moving React-owned nodes or changing copy text. */
+export function decorateRecap(message: Node): (() => void) | null {
+  const nodes = Array.from(message.querySelectorAll(`[${TAG}]`));
+  const start = nodes.findIndex(
+    (node) =>
+      /^h[1-6]$/.test(node.getAttribute(TAG) ?? "") &&
+      /^recap$/i.test(node.textContent?.trim() ?? "") &&
+      !node.closest(`[${TAG}="blockquote"]`),
+  );
+  if (start < 0) return null;
+  let end = start + 1;
+  while (end < nodes.length && !/^h[1-6]$/.test(nodes[end].getAttribute(TAG) ?? "")) end++;
+  const section = nodes.slice(start + 1, end);
+  const topBlocks = section.filter((node) => {
+    if (!blocks.has(node.getAttribute(TAG) ?? "")) return false;
+    for (
+      let parent = node.parentElement;
+      parent && parent !== message;
+      parent = parent.parentElement
+    )
+      if (blocks.has(parent.getAttribute(TAG) ?? "")) return false;
+    return true;
+  });
+  if (topBlocks.length !== 1 || topBlocks[0].getAttribute(TAG) !== "ul") return null;
+  const list = topBlocks[0];
+  const fields = Array.from(list.querySelectorAll(`[${TAG}="li"]`));
+  if (fields.length !== 3 || list.querySelector(`[${TAG}="ul"], [${TAG}="ol"]`)) return null;
+  const labels = ["branch", "did", "commit/push"];
+  if (
+    !fields.every((field, index) => {
+      const content = (field.textContent ?? "").replace(/^\s*[•*-]?\s*/, "");
+      const match = /^(Branch|Did|Commit\/push):\s*([\s\S]+)$/i.exec(content.trim());
+      return match?.[1].toLowerCase() === labels[index] && !!match[2].trim();
+    })
+  )
+    return null;
+  const changed: { node: Node; name: string; before: string | null }[] = [];
+  const mark = (node: Node, name: string, value: string) => {
+    changed.push({ node, name, before: node.getAttribute(name) });
+    node.setAttribute(name, value);
+  };
+  mark(nodes[start], "data-npa-recap-heading", "true");
+  mark(list, "data-npa-recap", "true");
+  fields.forEach((field, index) => mark(field, "data-npa-recap-field", labels[index]));
+  return () => {
+    for (const { node, name, before } of changed) {
+      if (before === null) node.removeAttribute(name);
+      else node.setAttribute(name, before);
+    }
+  };
+}
+
+// Paseo renders each Markdown block of one reply as its own history row; the rows share a message ID.
+export function messageParts(message: Node): Node[] {
+  const row = message.closest("[data-message-id]");
+  const id = row?.getAttribute("data-message-id");
+  const list = row?.parentElement;
+  if (!id || !list) return [message];
+  return Array.from(list.querySelectorAll('[data-testid="assistant-message"]')).filter(
+    (part) => part.closest("[data-message-id]")?.getAttribute("data-message-id") === id,
+  );
+}
+
+function topLevel(message: Node) {
+  return Array.from(message.querySelectorAll(`[${TAG}]`)).filter((node) => {
+    const tag = node.getAttribute(TAG) ?? "";
+    if (!blocks.has(tag) && !heading.test(tag)) return false;
+    for (
+      let parent = node.parentElement;
+      parent && parent !== message;
+      parent = parent.parentElement
+    ) {
+      const outer = parent.getAttribute(TAG) ?? "";
+      if (blocks.has(outer) || outer === "li" || heading.test(outer)) return false;
+    }
+    return true;
+  });
+}
+
+// Clones keep the host's classes and inline styles but drop Markdown tags, so later scans and the
+// host's copy logic never mistake them for message content.
+function copy(node: Node) {
+  const clone = node.cloneNode!(true);
+  for (const marker of Array.from(clone.querySelectorAll("[data-paseo-markdown-list-marker]")))
+    marker.remove();
+  for (const inner of [clone, ...Array.from(clone.querySelectorAll("*"))]) {
+    if (inner.getAttribute(TAG) === "code") inner.setAttribute("data-npa-code", "true");
+    for (const name of [TAG, "data-npa-recap-field"]) inner.removeAttribute(name);
+  }
+  return clone;
+}
+
+function stripLabel(node: Node): boolean {
+  for (const child of Array.from(node.childNodes ?? [])) {
+    if (child.nodeType === 3) {
+      if (!child.nodeValue?.trim()) continue;
+      child.nodeValue = child.nodeValue.replace(/^\s*(?:Branch|Did|Commit\/push):\s*/i, "");
+      return true;
+    }
+    if (stripLabel(child)) return true;
+  }
+  return false;
+}
+
+/** True when the nearest heading before `block` in the same reply is What Next or Next Steps. */
+export function underNextHeading(message: Node, block: Node): boolean {
+  const tops = messageParts(message).flatMap(topLevel);
+  for (let index = tops.indexOf(block) - 1; index >= 0; index--)
+    if (heading.test(tops[index].getAttribute(TAG) ?? ""))
+      return next.test(tops[index].textContent?.trim() ?? "");
+  return false;
+}
+
+/**
+ * Show a directly preceding compact Recap, the What Next heading, and its intro paragraphs inside
+ * the prompt panel. Native nodes are hidden in place, never moved, and restored by `undo`.
+ * `intact` turns false when the host re-renders a hidden node, so the caller can fold again.
+ */
+export function foldPanel(
+  doc: Document,
+  message: Node,
+  block: Node,
+  panel: Node,
+  section: Node,
+): { undo(): void; intact(): boolean } {
+  const parts = messageParts(message);
+  const tops = parts.flatMap(topLevel);
+  let index = tops.indexOf(block) - 1;
+  const intro: Node[] = [];
+  while (index >= 0 && tops[index].getAttribute(TAG) === "p") intro.unshift(tops[index--]);
+  const title = tops[index];
+  if (
+    !title ||
+    !heading.test(title.getAttribute(TAG) ?? "") ||
+    !next.test(title.textContent?.trim() ?? "")
+  )
+    return { undo() {}, intact: () => true };
+  const element = (tag: string, name: string, text?: string) => {
+    const node = doc.createElement(tag);
+    if (name) node.setAttribute("class", name);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const badge = () => {
+    const node = element("span", "npa-badge");
+    node.setAttribute("aria-hidden", "true");
+    return node;
+  };
+  const value = (field: Node, into: Node) => {
+    const clone = copy(field);
+    stripLabel(clone);
+    for (const child of Array.from(clone.childNodes ?? [])) into.appendChild(child);
+    return into;
+  };
+  const added: Node[] = [];
+  const hidden = [title, ...intro];
+  const list = tops[index - 1];
+  const recapTitle = tops[index - 2];
+  if (
+    list?.getAttribute("data-npa-recap") === "true" &&
+    recapTitle?.getAttribute("data-npa-recap-heading") === "true"
+  ) {
+    hidden.unshift(recapTitle, list);
+    const [branch, did, commit] = Array.from(list.querySelectorAll(`[${TAG}="li"]`));
+    const recap = element("div", "npa-section npa-recap");
+    recap.setAttribute("role", "group");
+    recap.setAttribute("aria-label", "Recap");
+    const head = element("div", "npa-recap-head");
+    const kicker = element("span", "npa-kicker");
+    kicker.appendChild(badge());
+    kicker.appendChild(element("span", "", recapTitle.textContent?.trim() || "Recap"));
+    head.appendChild(kicker);
+    const meta = element("span", "npa-meta");
+    meta.appendChild(value(branch, element("span", "npa-chip npa-branch")));
+    const shown = value(commit, element("span", "npa-commit-value"));
+    const said = shown.textContent?.trim() ?? "";
+    const status = element(
+      "span",
+      /^(?:committed|pushed)\b/i.test(said) ? "npa-chip npa-commit npa-ok" : "npa-chip npa-commit",
+    );
+    status.setAttribute("aria-label", `Commit/push: ${said}`);
+    // State reads from the icon and wording, not an extra hue (TASTE.md).
+    status.appendChild(/^none$/i.test(said) ? element("span", "", "No commit") : shown);
+    meta.appendChild(status);
+    head.appendChild(meta);
+    recap.appendChild(head);
+    recap.appendChild(value(did, element("p", "npa-did")));
+    panel.prepend!(recap);
+    added.push(recap);
+  }
+  const head = element("div", "npa-next-head");
+  const name = element("div", "npa-next-title");
+  name.appendChild(badge());
+  name.appendChild(element("span", "", title.textContent?.trim() ?? ""));
+  name.setAttribute("role", "heading");
+  name.setAttribute("aria-level", "2");
+  head.appendChild(name);
+  if (intro.length) {
+    const text = element("div", "npa-next-intro");
+    for (const paragraph of intro) text.appendChild(copy(paragraph));
+    head.appendChild(text);
+  }
+  section.prepend!(head);
+  added.push(head);
+  // A row left with only hidden blocks would still add its spacing.
+  const own = message.closest("[data-message-id]");
+  for (const part of parts) {
+    const row = part.closest("[data-message-id]");
+    if (row && row !== own && topLevel(part).every((node) => hidden.includes(node)))
+      hidden.push(row);
+  }
+  const prior = hidden.map((node) => node.getAttribute("data-npa-folded"));
+  for (const node of hidden) node.setAttribute("data-npa-folded", "true");
+  // Virtualized rows unmount and remount; a node that left with its row needs no refold.
+  const owners = hidden.map(
+    (node) => parts.find((part) => part.contains?.(node) || node.contains?.(part)) ?? node,
+  );
+  return {
+    undo() {
+      for (const node of added) node.remove();
+      hidden.forEach((node, position) => {
+        if (prior[position] === null) node.removeAttribute("data-npa-folded");
+        else node.setAttribute("data-npa-folded", prior[position]!);
+      });
+    },
+    intact: () =>
+      hidden.every((node, position) =>
+        node.isConnected
+          ? node.getAttribute("data-npa-folded") === "true"
+          : !owners[position].isConnected,
+      ) && messageParts(message).every((part) => parts.includes(part)),
+  };
+}

@@ -1,5 +1,12 @@
+import { parseNextPrompts, type NextPromptsV1 } from "./next-prompts";
+
 // `whys[i]` is the optional reason shown under `prompts[i]`; it is never sent.
-export type PromptBlock = { block: string; prompts: string[]; whys: string[] };
+export type PromptBlock = {
+  block: string;
+  prompts: string[];
+  whys: string[];
+  declaration?: NextPromptsV1;
+};
 
 export type GitAction = {
   kind: "commit" | "commit-push" | "push";
@@ -115,13 +122,31 @@ export function gitAction(text: string): GitAction | null {
 export function parsePrompts(markdown: string): PromptBlock[] {
   const result: PromptBlock[] = [];
   let section = false;
-  let fence: { char: string; length: number; eligible: boolean; lines: string[] } | null = null;
+  let fence: {
+    char: string;
+    length: number;
+    eligible: boolean;
+    structured: boolean;
+    lines: string[];
+  } | null = null;
   for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
     if (fence) {
       const closing = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
       if (closing && closing[1][0] === fence.char && closing[1].length >= fence.length) {
         if (fence.eligible) {
           const block = fence.lines.join("\n").replace(/\n+$/, "");
+          if (fence.structured) {
+            const declaration = parseNextPrompts(block);
+            if (declaration)
+              result.push({
+                block,
+                prompts: declaration.prompts.map((p) => p.prompt),
+                whys: declaration.prompts.map((p) => p.why ?? ""),
+                declaration,
+              });
+            fence = null;
+            continue;
+          }
           const prompts: string[] = [];
           const whys: string[] = [];
           let current: string[] | null = null;
@@ -147,13 +172,14 @@ export function parsePrompts(markdown: string): PromptBlock[] {
       continue;
     }
     const heading = line.match(/^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
-    if (heading) section = /^(?:what next|next steps)$/i.test(heading[1].trim());
+    if (heading) section = /^(?:what(?:['’]s)? next|next steps)$/i.test(heading[1].trim());
     const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^`]*)$/);
     if (opening)
       fence = {
         char: opening[1][0],
         length: opening[1].length,
-        eligible: section && /^(?:text|txt|plaintext)?\s*$/i.test(opening[2].trim()),
+        eligible: section && /^(?:text|txt|plaintext|next-prompts)?\s*$/i.test(opening[2].trim()),
+        structured: /^next-prompts$/i.test(opening[2].trim()),
         lines: [],
       };
   }
