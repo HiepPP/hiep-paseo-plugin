@@ -25,6 +25,7 @@ import { revealLatestPromptOnWeb } from "./latest-prompt";
 import { AgentAvatar } from "./avatar";
 import { Orb, OrbAvatar, orbSupported } from "./orb";
 import { orbSettings, type OrbSettings } from "../shared/orb";
+import { effortColor } from "../shared/effort";
 import { lastSettings } from "./warm";
 import { subscribeSendResult } from "./events";
 import { useClock } from "./clock";
@@ -167,17 +168,6 @@ function ProjectMark({
   );
 }
 
-/** Effort color rises with reasoning depth; unknown levels stay muted. */
-function effortColor(effort: string, fallback: string) {
-  const level = effort.toLowerCase().replace(/[\s_-]/g, "");
-  if (/max|ultra/.test(level)) return "hsl(330, 70%, 52%)";
-  if (/extra|xhigh/.test(level)) return "hsl(15, 85%, 52%)";
-  if (level.includes("high")) return "hsl(35, 90%, 45%)";
-  if (level.includes("medium")) return "hsl(220, 75%, 56%)";
-  if (/low|minimal/.test(level)) return "hsl(185, 70%, 38%)";
-  return fallback;
-}
-
 function ModelTags({
   run,
   theme,
@@ -233,7 +223,11 @@ function ModelTags({
     >
       {tag("Cpu", run.model ?? run.provider, colors.foreground)}
       {run.effort
-        ? tag("Brain", run.effort, effortColor(run.effort, colors.foregroundMuted))
+        ? tag(
+            "Brain",
+            run.effort,
+            effortColor(run.effort, colors.surface2) ?? colors.foregroundMuted,
+          )
         : null}
     </View>
   );
