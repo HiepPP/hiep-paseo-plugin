@@ -167,35 +167,81 @@ function ProjectMark({
   );
 }
 
-function Chip({
-  children,
+/** Effort color rises with reasoning depth; unknown levels stay muted. */
+function effortColor(effort: string, fallback: string) {
+  const level = effort.toLowerCase().replace(/[\s_-]/g, "");
+  if (/max|ultra/.test(level)) return "hsl(330, 70%, 52%)";
+  if (/extra|xhigh/.test(level)) return "hsl(15, 85%, 52%)";
+  if (level.includes("high")) return "hsl(35, 90%, 45%)";
+  if (level.includes("medium")) return "hsl(220, 75%, 56%)";
+  if (/low|minimal/.test(level)) return "hsl(185, 70%, 38%)";
+  return fallback;
+}
+
+function ModelTags({
+  run,
   theme,
   scale,
+  compact = false,
 }: {
-  children: string;
+  run: BoardRun;
   theme: PluginSurfaceProps["theme"];
   scale: number;
+  /** Plain icon rows for subagent cards; full cards use bordered tags. */
+  compact?: boolean;
 }) {
   const s = (value: number) => value * scale;
-  return (
-    <Text
-      numberOfLines={1}
+  const colors = theme.colors;
+  const tag = (icon: string, label: string, color: string) => (
+    <View
       style={{
-        color: theme.colors.foregroundMuted,
-        backgroundColor: theme.colors.surface2,
-        fontSize: s(11),
-        lineHeight: s(15),
-        fontWeight: "500",
-        paddingHorizontal: s(6),
-        paddingVertical: s(1.5),
-        borderRadius: s(CONTROL_RADIUS - 2),
-        overflow: "hidden",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: s(4),
+        minWidth: 0,
         flexShrink: 1,
+        ...(compact
+          ? {}
+          : {
+              paddingHorizontal: s(7),
+              paddingVertical: s(2),
+              borderWidth: 1,
+              borderColor: color === colors.foreground ? colors.border : color,
+              borderRadius: s(CONTROL_RADIUS - 2),
+              backgroundColor: colors.surface2,
+            }),
       }}
     >
-      {children}
-    </Text>
+      <Icon name={icon} size={s(compact ? 12 : 14)} color={color} />
+      <Text
+        numberOfLines={1}
+        style={{
+          color,
+          fontSize: s(compact ? 11.5 : 12.5),
+          lineHeight: s(compact ? 15 : 17),
+          fontWeight: "600",
+          flexShrink: 1,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
   );
+  return (
+    <View
+      style={{ flexDirection: "row", alignItems: "center", gap: s(compact ? 8 : 6), minWidth: 0 }}
+    >
+      {tag("Cpu", run.model ?? run.provider, colors.foreground)}
+      {run.effort
+        ? tag("Brain", run.effort, effortColor(run.effort, colors.foregroundMuted))
+        : null}
+    </View>
+  );
+}
+
+/** Model and effort when known; the provider stands in until the model is read. */
+function modelLabel(run: BoardRun) {
+  return [run.model ?? run.provider, run.effort].filter(Boolean).join(" · ");
 }
 
 // Constant for the session; reading it per card render was wasted work.
@@ -411,7 +457,7 @@ function RunCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open conversation ${run.title}`}
-        accessibilityHint={`${run.project}, ${run.provider}, ${run.needsInput ? "Needs input" : statusLabel(run.status)}, ${timing}${duration ? `, duration ${duration}` : ""}`}
+        accessibilityHint={`${run.project}, ${modelLabel(run)}, ${run.needsInput ? "Needs input" : statusLabel(run.status)}, ${timing}${duration ? `, duration ${duration}` : ""}`}
         disabled={!onOpen}
         onPress={() => onOpen?.(run.agentId)}
         onHoverIn={() => setHovered(true)}
@@ -444,8 +490,8 @@ function RunCard({
                 numberOfLines={1}
                 style={{
                   color: colors.foreground,
-                  fontSize: s(12),
-                  lineHeight: s(16),
+                  fontSize: s(13),
+                  lineHeight: s(17),
                   fontWeight: "600",
                 }}
               >
@@ -454,25 +500,13 @@ function RunCard({
               {inheritedProject ? null : (
                 <Text
                   numberOfLines={1}
-                  style={{ color: colors.foregroundMuted, fontSize: s(10), lineHeight: s(13) }}
+                  style={{ color: colors.foregroundMuted, fontSize: s(11), lineHeight: s(14) }}
                 >
                   {run.project}
                 </Text>
               )}
+              <ModelTags run={run} theme={theme} scale={scale} compact />
               <View style={{ flexDirection: "row", alignItems: "center", gap: s(3), minWidth: 0 }}>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: colors.foregroundMuted,
-                    fontSize: s(10),
-                    lineHeight: s(14),
-                    maxWidth: s(45),
-                    flexShrink: 1,
-                  }}
-                >
-                  {run.provider}
-                </Text>
-                <Text style={{ color: colors.foregroundMuted, fontSize: s(10) }}>·</Text>
                 {run.needsInput ? (
                   <AttentionPulse grow={1.2}>
                     <Icon name="CircleAlert" size={s(12)} color={tone} />
@@ -502,14 +536,19 @@ function RunCard({
                 <Text
                   numberOfLines={1}
                   style={{
-                    color: colors.foregroundMuted,
-                    fontSize: s(10),
-                    lineHeight: s(14),
+                    color: running && !run.needsInput ? colors.foregroundMuted : tone,
+                    fontSize: s(11),
+                    lineHeight: s(15),
+                    fontWeight: "500",
                     flexShrink: 1,
                   }}
                 >
                   {run.needsInput ? "Needs input" : statusLabel(run.status)}
-                  {duration ? ` · ${duration}` : ""}
+                  {duration ? (
+                    <Text style={{ color: colors.foregroundMuted, fontWeight: "400" }}>
+                      {` · ${duration}`}
+                    </Text>
+                  ) : null}
                 </Text>
               </View>
             </View>
@@ -582,9 +621,7 @@ function RunCard({
                       {run.project}
                     </Text>
                   )}
-                  <Chip theme={theme} scale={scale}>
-                    {run.provider}
-                  </Chip>
+                  <ModelTags run={run} theme={theme} scale={scale} />
                 </View>
               </View>
               {starButton}
@@ -933,6 +970,8 @@ const RunColumn = memo(function RunColumn({
       onOpen={onOpen}
       onStar={onStar}
       orb={orb}
+      // The project group heading already names the project.
+      inheritedProject
     />
   );
   const hueOf = (project: { runs: BoardRun[] }) => {
