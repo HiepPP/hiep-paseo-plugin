@@ -4,7 +4,7 @@
 
 - Title: Recap and What Next v2
 - Slug: 20260925-next-prompts-v1
-- Status: ACTIVE
+- Status: ARCHIVED
 - Updated: 2026-09-26
 
 ## Tracker
@@ -29,3 +29,4 @@
 ## Archive
 
 - Existing plans remain in [archive](archive/).
+- Archived: 2026-09-26 -> watchtower/archive/20260925-next-prompts-v1/
