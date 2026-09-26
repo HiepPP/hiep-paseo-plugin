@@ -5,7 +5,7 @@
 - Title: Recap and What Next v2
 - Slug: 20260925-next-prompts-v1
 - Status: ACTIVE
-- Updated: 2026-09-25
+- Updated: 2026-09-26
 
 ## Tracker
 
@@ -13,7 +13,7 @@
 |---|---|---|---|---|---|---|---|
 | 1 | TASK-001 Next prompts v1 | plugin | DONE | [Spec](tasks/TASK-001-next-prompts-v1.md) | - | [Context](CONTEXT.md) | [Verification](tasks/TASK-001-outcome.md) passed before the global policy update. |
 
-| 2 | TASK-002 Recap and What Next v2 | plugin | IN PROGRESS | [Spec](tasks/TASK-002-recap-next-v2.md) | TASK-001 | [Context](CONTEXT.md) | Direct desktop acceptance required. |
+| 2 | TASK-002 Recap and What Next v2 | plugin | DONE | [Spec](tasks/TASK-002-recap-next-v2.md) | TASK-001 | [Context](CONTEXT.md) | [Verification](tasks/TASK-002-outcome.md) accepted by the user on desktop. |
 
 ## Plan Verify
 
@@ -22,8 +22,9 @@
 
 ## Handoff
 
-- The local plugin is reloaded and the global policy is updated. No commit or push occurred.
-- TASK-002 remains IN PROGRESS. Code passes 69 tests; desktop still shows raw JSON after reload. Diagnose client rendering, then verify Edit/Send. See TASK-002 outcome.
+- Both TASKs are DONE. The v3 panel shipped in commit `a0b286a` on `main`.
+- The user accepted TASK-002 on desktop, including the multi-choice fixture check.
+- Next: archive this plan with `/watchtower archive`.
 
 ## Archive
 

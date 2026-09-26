@@ -1,6 +1,6 @@
 # TASK-002 outcome
 
-Status: IN PROGRESS
+Status: DONE
 
 ## Evidence
 
@@ -104,3 +104,8 @@ Status: IN PROGRESS
 - The real parser accepts the block. Selection rules: `brief` alone, `brief+checklist`, `detailed+checklist` allowed; `brief+detailed` and all three rejected.
 - Desktop clicks not performed: `cua_repl` still fails with `Computer Use was not approved to use Paseo`. Needs the user's manual check; archive the fixture agent afterward.
 - README section "Recap and next-step layout" updated for the v3 panel and read-only earlier replies.
+
+## Acceptance — 2026-09-26
+
+- The user reported TASK-002 complete after checking the multi-choice fixture on desktop.
+- Code shipped in commit `a0b286a` on `main`. The disposable fixture agent `9dd06a77-8b3d-471a-9bac-a1b48377a439` is archived.
