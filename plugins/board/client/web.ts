@@ -52,11 +52,12 @@ export function openNewWorkspaceForProject(input: {
   cwd: string;
   name: string;
   projectId?: string;
+  preferRoute?: boolean;
 }): boolean {
   if (Platform.OS !== "web" || typeof document === "undefined") return false;
   const label = `Create a new workspace for ${input.name}`.replace(/"/g, '\\"');
   const button = document.querySelector(`[aria-label="${label}"]`);
-  if (button && button.getAttribute("aria-disabled") !== "true") {
+  if (!input.preferRoute && button && button.getAttribute("aria-disabled") !== "true") {
     button.click();
     return true;
   }

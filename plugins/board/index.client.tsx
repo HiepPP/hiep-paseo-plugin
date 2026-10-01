@@ -1,4 +1,4 @@
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Platform } from "react-native";
 import { installNewThreadNavigation } from "./client/new-thread";
 import { installParentNavigation } from "./client/parent";
@@ -11,8 +11,13 @@ import { installBoardEvents } from "./client/events";
 import { installBoardShortcut } from "./client/shortcut";
 import { installProjectHeader } from "./client/project-header";
 
+import { registerBoardHost } from "./client/hosts";
+
 export default function contribute(client: PluginClientContext) {
-  const surface = client.addSurface("board", BoardPage);
+  const hostRegistration = registerBoardHost(client);
+  const surface = client.addSurface("board", (props: PluginSurfaceProps) => (
+    <BoardPage {...props} client={client} />
+  ));
   const sidebar = client.addSidebarItem({
     id: "board",
     title: "Board",
@@ -43,6 +48,7 @@ export default function contribute(client: PluginClientContext) {
     Platform.OS === "web" ? newThread.open : undefined,
   );
   return () => {
+    hostRegistration();
     removePlacement();
     projectHeader();
     removeButtons();
