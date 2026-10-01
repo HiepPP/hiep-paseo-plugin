@@ -18,15 +18,29 @@ const digest = (text) =>
   crypto.createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex");
 const dataRoot = (env) =>
   path.join(env.PASEO_HOME || path.join(os.homedir(), ".paseo"), "plugin-data/prompt-translate");
+const tracker = "src/hooks/caveman-mode-tracker.js";
+// A Caveman update replaces the versioned cache directory recorded at install time.
+function resolveCavemanRoot(env = process.env) {
+  const saved = JSON.parse(
+    fs.readFileSync(path.join(dataRoot(env), "hook-runtime.json"), "utf8"),
+  ).cavemanRoot;
+  if (saved && fs.existsSync(path.join(saved, tracker))) return saved;
+  const cache = path.join(
+    env.CODEX_HOME || path.join(os.homedir(), ".codex"),
+    "plugins/cache/caveman/caveman",
+  );
+  const newest = (fs.existsSync(cache) ? fs.readdirSync(cache) : [])
+    .filter((name) => fs.existsSync(path.join(cache, name, tracker)))
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0];
+  return newest ? path.join(cache, newest) : saved;
+}
 // The native Claude Caveman plugin is disabled because its hooks write the shared
 // ~/.claude flag, leaking one agent's mode into every Claude session. Claude sessions
 // outside Paseo get the same Caveman hooks through this bridge instead.
 function native(data, env = process.env) {
   const script =
     data.hook_event_name === "SessionStart" ? "caveman-activate.js" : "caveman-mode-tracker.js";
-  const { cavemanRoot } = JSON.parse(
-    fs.readFileSync(path.join(dataRoot(env), "hook-runtime.json"), "utf8"),
-  );
+  const cavemanRoot = resolveCavemanRoot(env);
   return execFileSync(process.execPath, [path.join(cavemanRoot, "src/hooks", script)], {
     input: JSON.stringify(data),
     env: { ...env, CLAUDE_PLUGIN_ROOT: cavemanRoot },
@@ -53,7 +67,7 @@ function run(data, env = process.env) {
   // A new composer has no agent UUID yet. Its explicit first-turn command bootstraps
   // isolated state; later turns use the usual hidden context and mode RPCs.
   if (initial && !/^[/$]caveman(?::caveman)?(?:\s|$)/i.test(data.prompt)) return {};
-  const runtime = JSON.parse(fs.readFileSync(path.join(root, "hook-runtime.json"), "utf8"));
+  const cavemanRoot = resolveCavemanRoot(env);
   const selected = initial
     ? { mode: "follow-agent" }
     : JSON.parse(fs.readFileSync(modeFile, "utf8"));
@@ -83,7 +97,7 @@ function run(data, env = process.env) {
     }
   }
   if (!modes.has(choice.mode)) throw new Error("Invalid Caveman mode");
-  const hookDir = path.join(runtime.cavemanRoot, "src/hooks");
+  const hookDir = path.join(cavemanRoot, "src/hooks");
   const { parseModeChange } = require(path.join(hookDir, "caveman-parse.js"));
   const config = require(path.join(hookDir, "caveman-config.js"));
   // Parsing and mode rules belong to Caveman, including explicit off/natural-language commands.
@@ -176,7 +190,7 @@ function run(data, env = process.env) {
     hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext },
   };
 }
-module.exports = { run, native, digest };
+module.exports = { run, native, digest, resolveCavemanRoot };
 if (require.main === module) {
   // Only the Claude registration passes --claude; Codex keeps its own Caveman plugin.
   const outside = process.argv.includes("--claude") && !uuid.test(process.env.PASEO_AGENT_ID || "");

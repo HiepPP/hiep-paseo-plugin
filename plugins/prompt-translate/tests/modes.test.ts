@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { AgentModes } from "../server/modes";
 import { translateSettings } from "../shared/settings";
 const require = createRequire(import.meta.url);
-const { run, digest } = require("../server/caveman-hook.cjs");
+const { run, digest, resolveCavemanRoot } = require("../server/caveman-hook.cjs");
 const A = "00000000-0000-4000-8000-000000000001",
   B = "00000000-0000-4000-8000-000000000002";
 async function fixture(nativeRules = "Native rules") {
@@ -219,7 +219,10 @@ test("Claude sessions outside Paseo run native Caveman hooks against their own c
   // Codex registration and Paseo agents never touch the shared Claude config.
   assert.equal(call([], prompt, {}), "{}");
   await writeFile(path.join(claudeDir, "mode.json"), "{}");
-  assert.equal(call(["--claude"], { hook_event_name: "SessionStart" }, { PASEO_AGENT_ID: A }), "{}");
+  assert.equal(
+    call(["--claude"], { hook_event_name: "SessionStart" }, { PASEO_AGENT_ID: A }),
+    "{}",
+  );
   assert.match(call(["--claude"], prompt, { PASEO_AGENT_ID: A }), /Use Caveman lite/);
   assert.equal(await readFile(path.join(claudeDir, "mode.json"), "utf8"), "{}");
 });
@@ -228,14 +231,20 @@ test("every active turn carries one example of the running level", async () => {
   const { modes, env } = await fixture();
   await modes.set(A, "ultra");
   const reminder = run({ prompt: "request" }, env).hookSpecificOutput.additionalContext;
-  assert.match(reminder, /Match this ultra density\. Example "Why re-render\?" - ultra: "ultra sample\."/);
+  assert.match(
+    reminder,
+    /Match this ultra density\. Example "Why re-render\?" - ultra: "ultra sample\."/,
+  );
   await modes.set(A, "wenyan-ultra");
   assert.match(
     run({ prompt: "next" }, env).hookSpecificOutput.additionalContext,
     /Match this wenyan-ultra density\. .* - wenyan-ultra: "wenyan-ultra sample\."/,
   );
   await modes.set(A, "follow-agent");
-  assert.doesNotMatch(run({ prompt: "plain" }, env).hookSpecificOutput.additionalContext, /density/);
+  assert.doesNotMatch(
+    run({ prompt: "plain" }, env).hookSpecificOutput.additionalContext,
+    /density/,
+  );
 });
 
 test("the example is not repeated when native rules already include it", async () => {
@@ -244,4 +253,38 @@ test("the example is not repeated when native rules already include it", async (
   const context = run({ prompt: "request" }, env).hookSpecificOutput.additionalContext;
   assert.equal(context.split('- ultra: "ultra sample."').length, 2);
   assert.doesNotMatch(context, /density/);
+});
+
+test("a missing cavemanRoot falls back to the newest cached Caveman version", async () => {
+  const { home, root, modes, env } = await fixture();
+  const cache = path.join(home, "codex/plugins/cache/caveman/caveman");
+  // 3.10.0 must beat 3.9.0 numerically; 4.0.0 has no hooks and is skipped.
+  for (const version of ["3.9.0", "3.10.0"])
+    await cp(path.join(home, "caveman"), path.join(cache, version), { recursive: true });
+  await mkdir(path.join(cache, "4.0.0"), { recursive: true });
+  const codexEnv = { ...env, CODEX_HOME: path.join(home, "codex") };
+  assert.equal(resolveCavemanRoot(codexEnv), path.join(home, "caveman"));
+  await writeFile(
+    path.join(root, "hook-runtime.json"),
+    JSON.stringify({ cavemanRoot: path.join(home, "caveman-removed") }),
+  );
+  assert.equal(resolveCavemanRoot(codexEnv), path.join(cache, "3.10.0"));
+  await modes.set(A, "lite");
+  assert.match(
+    run({ prompt: "request" }, codexEnv).hookSpecificOutput.additionalContext,
+    /Native rules lite/,
+  );
+  const settings = translateSettings.schema.parse({});
+  const input = { agentId: A, text: "request", source: "request", mode: "lite" as const };
+  const previous = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexEnv.CODEX_HOME;
+  try {
+    assert.match((await modes.prepare(input, settings)).token, /^\d+-/);
+    process.env.CODEX_HOME = path.join(home, "empty");
+    await assert.rejects(modes.prepare(input, settings), { code: "ENOENT" });
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previous;
+  }
+  assert.throws(() => run({ prompt: "request" }, { ...env, CODEX_HOME: path.join(home, "empty") }));
 });

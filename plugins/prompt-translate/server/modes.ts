@@ -1,9 +1,11 @@
 import { mkdir, readFile, rename, writeFile, unlink, access, readdir } from "node:fs/promises";
 import path from "node:path";
+import { homedir } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { cavemanModeSchema, type TranslateSettings } from "../shared/settings";
 import { hasVietnamese } from "../shared/vietnamese";
 
+const tracker = "src/hooks/caveman-mode-tracker.js";
 type Mode = TranslateSettings["cavemanMode"];
 export class AgentModes {
   constructor(private root: string) {}
@@ -17,6 +19,28 @@ export class AgentModes {
     const temporary = `${file}.${randomUUID()}.tmp`;
     await writeFile(temporary, JSON.stringify(value), { mode: 0o600 });
     await rename(temporary, file);
+  }
+  // Mirrors resolveCavemanRoot in caveman-hook.cjs, which runs standalone as the hook.
+  private async cavemanRoot(): Promise<string> {
+    const saved = JSON.parse(
+      await readFile(path.join(this.root, "hook-runtime.json"), "utf8"),
+    ).cavemanRoot;
+    const exists = (dir: string) =>
+      access(path.join(dir, tracker)).then(
+        () => true,
+        () => false,
+      );
+    if (saved && (await exists(saved))) return saved;
+    const cache = path.join(
+      process.env.CODEX_HOME || path.join(homedir(), ".codex"),
+      "plugins/cache/caveman/caveman",
+    );
+    const names = (await readdir(cache).catch(() => [] as string[])).sort((a, b) =>
+      b.localeCompare(a, undefined, { numeric: true }),
+    );
+    for (const name of names)
+      if (await exists(path.join(cache, name))) return path.join(cache, name);
+    return saved;
   }
   async get(agentId: string): Promise<{ mode: Mode }> {
     try {
@@ -40,8 +64,7 @@ export class AgentModes {
     input: { agentId: string; text: string; source: string; mode: Mode },
     settings: TranslateSettings,
   ) {
-    const runtime = JSON.parse(await readFile(path.join(this.root, "hook-runtime.json"), "utf8"));
-    await access(path.join(runtime.cavemanRoot, "src/hooks/caveman-mode-tracker.js"));
+    await access(path.join(await this.cavemanRoot(), tracker));
     await this.set(input.agentId, input.mode);
     const token = `${Date.now()}-${randomUUID()}`;
     const hash = createHash("sha256").update(input.text.replace(/\r\n/g, "\n")).digest("hex");
