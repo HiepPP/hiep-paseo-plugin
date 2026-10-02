@@ -15,6 +15,17 @@ export const recapStyles = `
 [data-npa-recap-stacked] > [data-npa-recap-field="did"] {grid-area:2/1/3/-1;padding:0!important;border-left:0;}
 [data-npa-recap-stacked] > [data-npa-recap-field="not yet"], [data-npa-recap-stacked] > [data-npa-recap-field="need from you"] {grid-column:1/-1;max-width:68ch;padding:0!important;border-left:0;}
 [data-npa-recap-field][data-npa-recap-empty] {display:none!important;}
+/* Five-field strip: each free-text field is a section. An owned copy shows the label above the
+   value; the native nodes stay in place, hidden. */
+[data-npa-recap-stacked] > [data-npa-recap-sectioned]:not([data-npa-recap-field="did"]) {padding:10px 0 0!important;border-top:1px solid color-mix(in srgb,currentColor 11%,transparent);}
+[data-npa-recap-sectioned] > :not([data-npa-recap-part]) {display:none!important;}
+[data-npa-recap-field] [data-npa-recap-label] {display:block;margin-bottom:2px;font-size:12.5px!important;font-weight:600;color:color-mix(in srgb,currentColor 60%,transparent);}
+[data-npa-recap-value] {color:color-mix(in srgb,currentColor 80%,transparent);}
+[data-npa-recap-value]::first-letter {text-transform:uppercase;}
+[data-npa-recap-value] * {display:inline!important;margin:0!important;}
+[data-npa-recap-value] [data-npa-list] {display:block!important;}
+[data-npa-recap-value] [data-npa-list="li"] {display:flex!important;gap:8px;margin-top:2px!important;}
+[data-npa-recap-value] [data-npa-code] {border-radius:6px;padding:1px 5px!important;background:color-mix(in srgb,currentColor 6%,transparent)!important;}
 [data-npa-recap-field]:first-child {padding-left:0!important;border-left:0;}
 [data-npa-recap-field]:last-child {padding-right:0!important;}
 [data-npa-recap-field] * {font-size:inherit!important;line-height:inherit!important;}
@@ -91,7 +102,10 @@ function recapFields(blocks: Node[]): { fields: Field[]; nested: Node[] } | null
   return { fields, nested: [] };
 }
 
-/** Decorate known Markdown shapes without moving React-owned nodes or changing copy text. */
+/**
+ * Decorate known Markdown shapes without moving React-owned nodes. The legacy strip keeps the
+ * native text; the five-field strip shows owned copies of its free-text fields.
+ */
 export function decorateRecap(message: Node): (() => void) | null {
   const nodes = Array.from(message.querySelectorAll(`[${TAG}]`));
   const start = nodes.findIndex(
@@ -130,13 +144,36 @@ export function decorateRecap(message: Node): (() => void) | null {
   // Bullets in a middle column wrap to a few words per line; give Did its own row. The five
   // fields always stack: Branch and Commit/push, then each free-text field on its own row.
   if (nested.length || labels === fullLabels) mark(list, "data-npa-recap-stacked", "true");
+  const doc = message.ownerDocument;
+  const added: Node[] = [];
   fields.forEach((field, index) => {
     const name = labels[index].toLowerCase();
     mark(field.node, "data-npa-recap-field", name);
-    if (/^(?:not yet|need from you)$/.test(name) && saysNothing(field))
+    if (labels !== fullLabels || !freeText.has(name)) return;
+    if (name !== "did" && saysNothing(field)) {
       mark(field.node, "data-npa-recap-empty", "true");
+      return;
+    }
+    if (!doc) return;
+    // The label shares a text node with its value, so only a copy can put it on its own line.
+    const part = doc.createElement("div");
+    part.setAttribute("data-npa-recap-part", "true");
+    const label = doc.createElement("span");
+    label.setAttribute("data-npa-recap-label", "true");
+    label.textContent = labels[index];
+    const value = doc.createElement("div");
+    value.setAttribute("data-npa-recap-value", "true");
+    const clone = copy(field.node);
+    stripLabel(clone);
+    for (const child of Array.from(clone.childNodes ?? [])) value.appendChild(child);
+    part.appendChild(label);
+    part.appendChild(value);
+    field.node.appendChild(part);
+    added.push(part);
+    mark(field.node, "data-npa-recap-sectioned", "true");
   });
   return () => {
+    for (const node of added) node.remove();
     for (const { node, name, before } of changed) {
       if (before === null) node.removeAttribute(name);
       else node.setAttribute(name, before);
@@ -183,6 +220,8 @@ function topLevel(message: Node) {
 // host's copy logic never mistake them for message content.
 function copy(node: Node) {
   const clone = node.cloneNode!(true);
+  // A strip section already holds a copy of this field; copying it again would repeat the text.
+  for (const part of Array.from(clone.querySelectorAll("[data-npa-recap-part]"))) part.remove();
   // Keep markers of nested list items; drop only the copied item's own marker.
   for (const marker of Array.from(clone.querySelectorAll("[data-paseo-markdown-list-marker]"))) {
     const item = marker.parentElement?.closest(`[${TAG}="li"]`);
@@ -367,12 +406,19 @@ export function foldPanel(
     head.appendChild(meta);
     recap.appendChild(head);
     const bullets = did.list ?? did.node.querySelector(`[${TAG}="ul"], [${TAG}="ol"]`);
-    recap.appendChild(value(did, element(bullets ? "div" : "p", "npa-did")));
+    const text = value(did, element(bullets ? "div" : "p", "npa-did"));
+    if (labels === fullLabels) {
+      // Each five-field item is a small section: its label above its value.
+      const part = element("div", "npa-recap-part");
+      part.appendChild(element("span", "npa-recap-label", "Did"));
+      part.appendChild(text);
+      recap.appendChild(part);
+    } else recap.appendChild(text);
     // A field that says nothing needs no row.
     for (const label of ["Not yet", "Need from you"]) {
       const open = field(label);
       if (!open || saysNothing(open)) continue;
-      const row = element("div", "npa-recap-row");
+      const row = element("div", "npa-recap-row npa-recap-part");
       row.appendChild(element("span", "npa-recap-label", label));
       row.appendChild(value(open, element("div", "npa-recap-value")));
       recap.appendChild(row);

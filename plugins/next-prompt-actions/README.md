@@ -69,9 +69,11 @@ In the panel, the header shows a Branch chip and a Commit chip. The Commit chip 
 | legacy `committed ...` or `pushed ...`                   | the value as written                                                    | check  |
 | anything else                                            | the value as written                                                    | commit |
 
-The body shows Did, then a labeled row for each of `Not yet` and `Need from you` (short label, then the value, with sub-bullets kept as a list).
-A row whose value is `nothing`, in any case and with an optional trailing period, is omitted. As a compact strip, the five-field list stacks:
+The body of a five-field Recap is split into small sections, Did, Not yet, and Need from you. Each has its label above its value, with a divider line between sections and sub-bullets kept as a list.
+The legacy three-field Recap keeps its single unlabeled Did line.
+A Not yet or Need from you section whose value is `nothing`, in any case and with an optional trailing period, is omitted. As a compact strip, the five-field list stacks:
 Branch and Commit/push on the first row, then Did, Not yet, and Need from you each on a full-width row, with `nothing` rows hidden.
+Each of those three rows is a section like the panel's: the label sits above the value. The label and value are a plugin-owned copy inside the list item; the native nodes stay in place, hidden, and return when the strip is removed. The legacy strip keeps its native text.
 
 - Current reply: the panel has controls. One suggestion gets direct Edit and Send. Several suggestions separate exclusive
   choices from additional suggestions, with a shared bar for the count, Edit selected, and Send selected.

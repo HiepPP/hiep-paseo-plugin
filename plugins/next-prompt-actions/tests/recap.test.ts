@@ -580,3 +580,194 @@ test("the five-field strip keeps field order in the one-column layout", () => {
     /\[data-npa-recap-stacked\] > \[data-npa-recap-field="did"\] \{grid-area:auto;\}/,
   );
 });
+
+const classes = (node: Node) => node.getAttribute("class");
+const sectionLabels = (panel: Node) =>
+  Array.from(panel.querySelectorAll(".npa-recap-part")).map(
+    (part) => part.querySelector(".npa-recap-label")!.textContent,
+  );
+
+test("a five-field Recap folds Did, Not yet, and Need from you into labeled sections in order", () => {
+  const { panel, message, before, folded } = foldRecap(fullRecap());
+  const recap = panel.querySelector(".npa-recap")!;
+  assert.deepEqual(
+    Array.from(recap.children).map((child) => classes(child as Node)),
+    [
+      "npa-recap-head",
+      "npa-recap-part",
+      "npa-recap-row npa-recap-part",
+      "npa-recap-row npa-recap-part",
+    ],
+  );
+  assert.deepEqual(sectionLabels(panel), ["Did", "Not yet", "Need from you"]);
+  // The label sits above its value inside each section.
+  for (const part of panel.querySelectorAll(".npa-recap-part")) {
+    assert.equal(classes(part.children[0] as Node), "npa-recap-label");
+    assert.equal(part.children.length, 2);
+  }
+  const did = panel.querySelector(".npa-recap-part")!;
+  assert.equal(did.querySelector(".npa-recap-row"), null, "the Did section is not a row");
+  assert.equal(classes(did.children[1] as Node), "npa-did");
+  assert.equal(did.querySelector(".npa-did")?.textContent?.trim(), "Read the report.");
+  assert.equal(did.querySelector("a")?.getAttribute("href"), "/report");
+  assert.deepEqual(rows(panel), [
+    ["Not yet", "Needs a device check."],
+    ["Need from you", "Open a new session."],
+  ]);
+  folded.undo();
+  assert.equal(message.innerHTML, before);
+});
+
+test("sections whose value is nothing are omitted, but Did always shows", () => {
+  const labelsFor = (notYet: string, need: string) =>
+    sectionLabels(
+      foldRecap(fullRecap([full.branch, full.commit, "Did: nothing", notYet, need])).panel,
+    );
+  assert.deepEqual(labelsFor("Not yet: nothing", "Need from you: Nothing."), ["Did"]);
+  assert.deepEqual(labelsFor("Not yet: Nothing.", "Need from you: Check the chip."), [
+    "Did",
+    "Need from you",
+  ]);
+  assert.deepEqual(labelsFor("Not yet: Needs a check.", "Need from you: NOTHING"), [
+    "Did",
+    "Not yet",
+  ]);
+});
+
+test("labeled lines fold into the same sections, with a list inside its own section", () => {
+  const { panel } = foldRecap(sectionPlain);
+  assert.deepEqual(sectionLabels(panel), ["Did", "Not yet", "Need from you"]);
+  const [, notYet] = Array.from(panel.querySelectorAll(".npa-recap-part")) as Node[];
+  assert.equal(notYet.querySelectorAll("[data-npa-list='li']").length, 2);
+  assert.equal(notYet.querySelector(".npa-recap-value")?.parentElement, notYet);
+});
+
+test("the legacy Recap panel has no Did label, section wrapper, or divider element", () => {
+  const { panel } = foldRecap(recap().split('<div data-paseo-markdown-tag="h2">What Next')[0]);
+  const recapNode = panel.querySelector(".npa-recap")!;
+  assert.equal(panel.querySelector(".npa-recap-part"), null);
+  assert.equal(panel.querySelector(".npa-recap-label"), null);
+  assert.deepEqual(
+    Array.from(recapNode.children).map((child) => classes(child as Node)),
+    ["npa-recap-head", "npa-did"],
+  );
+});
+
+const parts = (message: { querySelectorAll(selector: string): ArrayLike<unknown> }) =>
+  Array.from(message.querySelectorAll("[data-npa-recap-part]")) as unknown as Node[];
+
+test("the five-field strip shows each free-text field as a labeled section", () => {
+  const { message, before, cleanup } = strip(fullList());
+  assert.deepEqual(
+    parts(message).map((part) => [
+      part.parentElement!.getAttribute("data-npa-recap-field"),
+      part.querySelector("[data-npa-recap-label]")!.textContent,
+      part.querySelector("[data-npa-recap-value]")!.textContent!.trim(),
+    ]),
+    [
+      ["did", "Did", "Read the report."],
+      ["not yet", "Not yet", "Needs a device check."],
+      ["need from you", "Need from you", "Open a new session."],
+    ],
+  );
+  // Links survive in the copy, and the copy never looks like host Markdown.
+  assert.ok(parts(message)[0].querySelector('a[href="/report"]'));
+  assert.equal(parts(message)[0].querySelector("[data-paseo-markdown-tag]"), null);
+  assert.equal(message.querySelectorAll("[data-npa-recap-sectioned]").length, 3);
+  cleanup!();
+  assert.equal(message.innerHTML, before);
+});
+
+test("strip sections leave every native node in place", () => {
+  const { message, cleanup } = strip(fullList());
+  const did = message.querySelector('[data-npa-recap-field="did"]')!;
+  const native = (
+    Array.from(did.children) as { hasAttribute(name: string): boolean; textContent: string }[]
+  ).filter((child) => !child.hasAttribute("data-npa-recap-part"));
+  assert.equal(native.length, 2);
+  assert.ok(native[0].hasAttribute("data-paseo-markdown-list-marker"));
+  assert.equal(native[1].textContent, "Did: Read the report.");
+  assert.equal(did.lastElementChild!.getAttribute("data-npa-recap-part"), "true");
+  cleanup!();
+});
+
+test("strip sections keep sub-bullets and code, and skip fields that say nothing", () => {
+  const { message, before, cleanup } = strip(
+    fullList([
+      full.branch,
+      full.commit,
+      `Did: Edited <span data-paseo-markdown-tag="code">recap.ts</span>.`,
+      `Not yet:${bullets("Check dark theme.", "Check narrow width.")}`,
+      "Need from you: nothing",
+    ]),
+  );
+  const [did, notYet, ...rest] = parts(message);
+  assert.equal(rest.length, 0);
+  assert.equal(did.querySelector("[data-npa-code]")!.textContent, "recap.ts");
+  assert.equal(notYet.querySelectorAll('[data-npa-list="li"]').length, 2);
+  assert.equal(notYet.querySelectorAll('[data-npa-list="ul"]').length, 1);
+  assert.equal(
+    notYet.querySelector("[data-npa-recap-value]")!.textContent!.replace(/•/g, "").trim(),
+    "Check dark theme.Check narrow width.",
+  );
+  assert.equal(
+    message
+      .querySelector('[data-npa-recap-field="need from you"]')!
+      .getAttribute("data-npa-recap-empty"),
+    "true",
+  );
+  cleanup!();
+  assert.equal(message.innerHTML, before);
+});
+
+test("Branch, Commit/push, and the legacy strip get no section copy", () => {
+  const five = strip(fullList());
+  for (const name of ["branch", "commit/push"])
+    assert.equal(
+      five.message.querySelector(`[data-npa-recap-field="${name}"] [data-npa-recap-part]`),
+      null,
+    );
+  five.cleanup!();
+  const legacy = strip(recap());
+  assert.ok(legacy.cleanup);
+  assert.equal(parts(legacy.message).length, 0);
+  assert.equal(legacy.message.querySelector("[data-npa-recap-sectioned]"), null);
+});
+
+test("a panel folded over a sectioned strip does not repeat the copied text", () => {
+  const { document } = parseHTML(
+    `<div id="message">${fullRecap()}<div data-paseo-markdown-tag="h2">What Next</div><div data-paseo-markdown-tag="pre">prompt: Verify.</div></div><div id="panel"><div id="section"></div></div>`,
+  );
+  const message = document.querySelector("#message")!;
+  const before = message.innerHTML;
+  const cleanup = decorateRecap(message as unknown as Node)!;
+  const folded = foldPanel(
+    document as unknown as Parameters<typeof foldPanel>[0],
+    message as unknown as Node,
+    message.querySelector('[data-paseo-markdown-tag="pre"]') as unknown as Node,
+    document.querySelector("#panel") as unknown as Node,
+    document.querySelector("#section") as unknown as Node,
+  );
+  const panel = document.querySelector("#panel")!;
+  assert.equal(panel.querySelector(".npa-did")!.textContent!.trim(), "Read the report.");
+  assert.deepEqual(rows(panel as unknown as Node), [
+    ["Not yet", "Needs a device check."],
+    ["Need from you", "Open a new session."],
+  ]);
+  assert.equal(panel.querySelector("[data-npa-recap-part]"), null);
+  folded.undo();
+  cleanup();
+  assert.equal(message.innerHTML, before);
+});
+
+test("strip section styles put the label on its own line and hide the native copy", () => {
+  assert.match(
+    recapStyles,
+    /\[data-npa-recap-sectioned\] > :not\(\[data-npa-recap-part\]\) \{display:none!important;\}/,
+  );
+  assert.match(recapStyles, /\[data-npa-recap-label\] \{display:block;/);
+  assert.match(
+    recapStyles,
+    /\[data-npa-recap-sectioned\]:not\(\[data-npa-recap-field="did"\]\) \{padding:10px 0 0!important;border-top:1px solid/,
+  );
+});

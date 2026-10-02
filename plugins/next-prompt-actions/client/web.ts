@@ -38,6 +38,7 @@ export interface Node {
   nodeType?: number;
   nodeValue?: string | null;
   prepend?(node: Node): void;
+  ownerDocument?: Document | null;
 }
 export interface Document extends Node {
   head: Node;
@@ -194,8 +195,9 @@ const styles = `
 [${OWNER}] .npa-next-intro > * {display:block!important;}
 [${OWNER}] :is(.npa-did, .npa-recap-value) [data-npa-list] {display:block!important;}
 [${OWNER}] :is(.npa-did, .npa-recap-value) [data-npa-list="li"] {display:flex!important;gap:8px;margin-top:2px!important;}
-[${OWNER}] .npa-recap-row {display:grid;grid-template-columns:96px minmax(0,1fr);gap:0 12px;align-items:baseline;margin-top:8px;}
-[${OWNER}] .npa-recap-label {min-width:0;font-size:12.5px;font-weight:600;line-height:1.6;color:var(--npa-muted);overflow-wrap:anywhere;}
+[${OWNER}] .npa-recap-part {margin-top:10px;padding-top:10px;border-top:1px solid var(--npa-line);}
+[${OWNER}] .npa-recap-head + .npa-recap-part {margin-top:8px;padding-top:0;border-top:0;}
+[${OWNER}] .npa-recap-label {display:block;margin-bottom:2px;font-size:12.5px;font-weight:600;line-height:1.6;color:var(--npa-muted);overflow-wrap:anywhere;}
 [${OWNER}] [data-npa-code] {font-family:var(--npa-mono)!important;font-size:.88em!important;padding:1px 5px!important;border-radius:6px;background:var(--npa-chip)!important;color:var(--npa-ink,inherit)!important;}
 [${OWNER}] .npa-chip * {display:inline!important;margin:0!important;padding:0!important;background:none!important;font-size:inherit!important;line-height:inherit!important;}
 [${OWNER}] .npa-next-head {margin-bottom:16px;}
@@ -287,7 +289,6 @@ const styles = `
   [${OWNER}] .npa-selection-footer {padding:12px 16px;}
   [${OWNER}] .npa-row {grid-template-columns:minmax(0,1fr);}
   [${OWNER}] .npa-next-intro {margin-left:0;}
-  [${OWNER}] .npa-recap-row {grid-template-columns:minmax(0,1fr);gap:2px;}
 }
 `;
 

@@ -1896,3 +1896,32 @@ test("a five-field Recap without a prompt block decorates as a stacked strip and
     else Reflect.deleteProperty(globalThis, "MutationObserver");
   }
 });
+
+test("Recap sections stack with a divider between them and no two-column grid", async () => {
+  const code = "prompt: Verify.";
+  await withReply(
+    { html: nextHtml, message: `## What Next\n\`\`\`text\n${code}\n\`\`\``, code },
+    ({ document }) => {
+      const css = document.head.querySelector("style")!.textContent!;
+      const rule = (selector: string) =>
+        css.match(new RegExp(`${selector.replace(/[.+]/g, "\\$&")}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+      const part = rule(".npa-recap-part");
+      assert.match(part, /border-top:1px solid var\(--npa-line\)/);
+      assert.match(part, /margin-top:10px/);
+      assert.match(part, /padding-top:10px/);
+      assert.doesNotMatch(part, /display:\s*(?:grid|flex)/);
+      // The first section sits under the chips with no divider.
+      const first = rule(".npa-recap-head + .npa-recap-part");
+      assert.match(first, /margin-top:8px/);
+      assert.match(first, /border-top:0/);
+      const label = rule(".npa-recap-label");
+      assert.match(label, /display:block/);
+      assert.match(label, /font-size:12\.5px/);
+      assert.match(label, /font-weight:600/);
+      assert.match(label, /color:var\(--npa-muted\)/);
+      assert.doesNotMatch(label, /text-transform/);
+      assert.doesNotMatch(css, /96px/);
+      assert.doesNotMatch(css, /\.npa-recap-row\s*\{/);
+    },
+  );
+});
