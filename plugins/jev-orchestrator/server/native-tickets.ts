@@ -6,7 +6,11 @@ import { parse, stringify } from "smol-toml";
 import { nativePrepareSchema } from "../shared/native";
 import { nativePolicySchema } from "./native-hook";
 import type { Decision, Judge } from "./types";
-import { NativePreflightError, type NativeFailureStage } from "./native-preflight-error";
+import {
+  NativePreflightError,
+  NativeTicketMissingError,
+  type NativeFailureStage,
+} from "./native-preflight-error";
 
 type Input = ReturnType<typeof nativePrepareSchema.parse>;
 type RecordEntry = {
@@ -298,8 +302,8 @@ export class NativeTickets {
     if (action === "native_consume") {
       const input = raw?.input;
       const r = [...b.records.values()].find((item) => item.ticket === input?.task_name);
+      if (!r) throw new NativeTicketMissingError();
       if (
-        !r ||
         r.state !== "issued" ||
         this.now() >= r.expiresAt ||
         raw.sessionId !== r.sessionId ||

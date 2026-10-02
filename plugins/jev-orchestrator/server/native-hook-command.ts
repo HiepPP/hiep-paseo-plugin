@@ -181,12 +181,13 @@ async function main() {
           response.status === 403
             ? "Jev native session binding expired or invalid. Create a fresh Paseo agent; old tickets cannot be reused."
             : "Jev native ticket rejected. Check native_delegation_status, request contract, workspace, policy, expiry and remaining slots. Do not retry with a new request ID.";
-        if (response.status === 503) {
-          const error = await response.json().catch(() => null);
-          if (error?.code === "daemon_disconnected")
-            failureReason =
-              "Jev native routing unavailable: Paseo daemon transport disconnected. Run paseo plugin reload jev-orchestrator, then create a fresh Paseo agent. Do not restart the daemon.";
-        }
+        const error = await response.json().catch(() => null);
+        if (response.status === 503 && error?.code === "daemon_disconnected")
+          failureReason =
+            "Jev native routing unavailable: Paseo daemon transport disconnected. Run paseo plugin reload jev-orchestrator, then create a fresh Paseo agent. Do not restart the daemon.";
+        if (response.status === 400 && error?.code === "NATIVE_TICKET_MISSING")
+          failureReason =
+            "Jev native ticket missing: task_name is not an issued Jev ticket. Call mcp__jev_orchestrator__prepare_native_delegate first; if it returns action delegate, call spawn_agent once with the returned taskName as task_name, sourceRole as agent_type, fork_turns none and the returned message unchanged.";
         throw new Error("Ticket rejected.");
       }
       failureReason =

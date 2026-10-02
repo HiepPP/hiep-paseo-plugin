@@ -259,6 +259,17 @@ test("real command hook registers root intent and consumes over the scoped bridg
     assert.match(rejected.hookSpecificOutput.permissionDecisionReason, /ticket rejected/);
     assert.doesNotMatch(JSON.stringify(rejected), /private internal/);
     scopeError = undefined;
+    const unprepared = await hook("collaborationspawn_agent", {
+      task_name: "latency_audit",
+      agent_type: "default",
+      fork_turns: "none",
+      message: "ciphertext",
+    });
+    assert.equal(unprepared.hookSpecificOutput.permissionDecision, "deny");
+    assert.match(
+      unprepared.hookSpecificOutput.permissionDecisionReason,
+      /ticket missing.*Call mcp__jev_orchestrator__prepare_native_delegate first/,
+    );
     assert.deepEqual(await hook("mcp__jev_orchestrator__prepare_native_delegate", f.input), {});
     const res = await fetch(url, {
       method: "POST",

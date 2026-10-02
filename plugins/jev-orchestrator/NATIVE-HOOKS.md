@@ -181,6 +181,9 @@ and logs, then create a fresh Paseo parent and verify `prepare_native_delegate` 
 restart the daemon. Reload revokes existing parent bindings and tickets; it cannot repair an old
 parent's injected MCP URL/token. `session binding expired or invalid` also requires a fresh parent.
 
+`ticket missing` means native spawn used a `task_name` that no preflight issued: call
+`prepare_native_delegate` first and spawn with its returned `taskName`.
+
 `bridge unreachable` requires checking plugin availability. `ticket rejected` means the bridge
 responded but rejected the operation: inspect `native_delegation_status`, the request contract,
 workspace, policy, expiry and remaining slots. Never retry a failed task with a new request ID.

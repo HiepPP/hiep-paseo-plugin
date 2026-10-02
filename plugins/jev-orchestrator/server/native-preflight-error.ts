@@ -12,6 +12,14 @@ const codes = {
 } as const;
 export type NativeFailureStage = keyof typeof codes;
 
+// A native spawn named a task that no preflight issued; the parent skipped prepare_native_delegate.
+export class NativeTicketMissingError extends Error {
+  readonly code = "NATIVE_TICKET_MISSING";
+  constructor() {
+    super("No issued Jev ticket matches task_name. Call prepare_native_delegate first.");
+  }
+}
+
 // Never carry an underlying error, task text, credentials or filesystem paths across the bridge.
 export class NativePreflightError extends Error {
   readonly code: string;

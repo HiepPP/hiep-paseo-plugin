@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Engine } from "./engine";
-import { NativePreflightError } from "./native-preflight-error";
+import { NativePreflightError, NativeTicketMissingError } from "./native-preflight-error";
 
 export function createBridge(
   engine: Engine,
@@ -73,6 +73,10 @@ export function createBridge(
             evaluationError: error.evaluation,
           }),
         );
+        return;
+      }
+      if (error instanceof NativeTicketMissingError) {
+        response.writeHead(400).end(JSON.stringify({ code: error.code, error: error.message }));
         return;
       }
       // Expose only a known transport failure, never arbitrary SDK errors or task data.
