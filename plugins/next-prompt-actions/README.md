@@ -14,6 +14,7 @@ All actions share Send's busy, stale, and duplicate guards. Git actions require 
 clicks; their blocks keep individual controls, and Jev does not auto-run them.
 An optional `why:` line under a prompt shows as its reason and is never sent.
 An optional `thread: new` line under a prompt marks it as unrelated to the current task (see [Goal and new-thread suggestions](#goal-and-new-thread-suggestions)).
+An optional `suggestion: true` or `suggestion: false` line under a prompt marks whether the agent recommends it (see [Suggested badge](#suggested-badge)).
 Send preserves the composer draft. Edit replaces it with the selected prompt text for manual review.
 Hold Cmd while the pointer is over an enabled Send button to turn it into New thread.
 The click then starts that prompt in a new thread instead of sending it here (see below). Git actions keep their normal behavior.
@@ -26,9 +27,51 @@ The swap changes no button size, and the click always does what the button shows
 
 A suggestion block under What Next becomes one panel ([design](../../docs/designs/recap-next-panel-2026-09-25/panel-v3.html), [rules](../../docs/designs/recap-next-panel-2026-09-25/TASTE.md)).
 The panel shows a directly preceding Recap (branch, commit status, and work summary), the What Next title and intro, and the suggestions.
-A Recap with exactly the Branch, Did, and Commit/push fields joins the panel, or shows as a compact strip when no panel follows.
-Recap parsing follows the global answer rules: Branch, Did, and Commit/push, followed by What Next or Next Steps. Fields may span separate history rows; late or changed blocks trigger a fresh fold. Plain Recap fields also join the following panel, either as three paragraphs or three lines separated by Markdown line breaks. Inline code and links are preserved. Other Recap shapes keep their original rendering.
+A Recap joins the panel, or shows as a compact strip when no panel follows. Two field sets are recognised, each followed by What Next or Next Steps.
+Fields may span separate history rows; late or changed blocks trigger a fresh fold. Inline code and links are preserved.
+Any other field set or order, a missing label, an extra unlabeled block, or a quoted Recap keeps its original rendering.
 Native Markdown is hidden in place, not removed, and returns when the plugin is disabled.
+
+- Five fields, in this order: `Branch`, `Commit/push`, `Did`, `Not yet`, `Need from you`.
+  `Commit/push` is `no`, or `yes` followed by detail such as `yes, committed abc1234`, `yes - pushed main`, or `yes committed abc1234`.
+  `Did`, `Not yet`, and `Need from you` may each hold sub-bullets. Write `nothing` for a field with nothing to report.
+- Legacy three fields: `Branch`, `Did`, `Commit/push`. It still renders exactly as before, in the panel and as a compact strip.
+
+Accepted shapes of the five-field Recap:
+
+- One top-level bullet list with exactly five items, one per label. Nested lists are allowed only inside Did, Not yet, and Need from you.
+- Labeled lines, as one or more paragraphs with one field per line. A label line may be followed directly by a top-level
+  bullet or numbered list that belongs to that field. The list may follow Did, Not yet, or Need from you only.
+  A label with an empty value, such as `Not yet:`, is valid only when such a list follows it.
+  Labeled lines join the panel only; with no panel they keep their native rendering, as the legacy lines do.
+
+```markdown
+## Recap
+
+Branch: main
+Commit/push: no
+Did: Rewrote the section. +12/-8.
+Not yet:
+
+- Item one.
+- Item two.
+
+Need from you: Open a new session and check the chip.
+```
+
+In the panel, the header shows a Branch chip and a Commit chip. The Commit chip maps its value like this; the chip's `aria-label` keeps the full original value (`Commit/push: <value>`).
+
+| Value                                                    | Chip text                                                               | Icon   |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- | ------ |
+| `no`, or legacy `none`, with an optional trailing period | No commit                                                               | commit |
+| `yes` alone                                              | Committed                                                               | check  |
+| `yes` plus detail, such as `yes, committed abc1234`      | the detail without `yes` and its separator, such as `committed abc1234` | check  |
+| legacy `committed ...` or `pushed ...`                   | the value as written                                                    | check  |
+| anything else                                            | the value as written                                                    | commit |
+
+The body shows Did, then a labeled row for each of `Not yet` and `Need from you` (short label, then the value, with sub-bullets kept as a list).
+A row whose value is `nothing`, in any case and with an optional trailing period, is omitted. As a compact strip, the five-field list stacks:
+Branch and Commit/push on the first row, then Did, Not yet, and Need from you each on a full-width row, with `nothing` rows hidden.
 
 - Current reply: the panel has controls. One suggestion gets direct Edit and Send. Several suggestions separate exclusive
   choices from additional suggestions, with a shared bar for the count, Edit selected, and Send selected.
@@ -60,8 +103,8 @@ Use one JSON fence with the language `next-prompts`. The first suggestion is the
 ```
 ````
 
-- `version` must be `1`. Each prompt has a unique lowercase ID, exact `prompt` text, an optional `why`, and an optional
-  `"thread": "new"`. The block may set `"goal": "done"`.
+- `version` must be `1`. Each prompt has a unique lowercase ID, exact `prompt` text, an optional `why`, an optional
+  `"thread": "new"`, and an optional `"suggestion": true` or `false`. The block may set `"goal": "done"`.
 - `exclusiveGroups` declare disjoint radio groups. Each group permits at most one selection, not a required selection.
 - Other suggestions use checkboxes. Nothing is selected automatically. Clear selection resets all controls.
 - `allowedCombinations` lists exact permitted sets of IDs. Subsets, supersets, and transitive combinations are not inferred.
@@ -81,6 +124,19 @@ Malformed, partial, or unsupported blocks remain visible as plain code without p
 Limits: 64 KiB per JSON block, 1–20 prompts, 16,000 characters per prompt, 2,000 per reason,
 64 characters per ID (`[a-z][a-z0-9-]*`), 20 exclusive groups, and 64 allowed combinations.
 Each group or combination contains 2–20 distinct IDs. Legacy blocks retain their existing parser limits.
+
+## Suggested badge
+
+The agent marks each prompt it recommends doing next. Several prompts, including new-thread prompts, may be suggested.
+
+- Structured fence: `"suggestion": true` or `"suggestion": false` on a prompt. Absent means `false`.
+  A value that is not a boolean counts as `false`; it never rejects the block.
+- Legacy fence: a `suggestion: true` or `suggestion: false` line under a prompt, matched without regard to case like `thread: new`.
+  The first such line of a prompt decides. These lines are never part of the prompt text. Other values, such as `suggestion: maybe`, stay in the prompt text.
+- A suggested prompt shows a `Suggested` badge at the top right of its card: the direct Edit and Send card, the checkbox and radio row,
+  the read-only card of an earlier reply, and the Other work card. The badge sits in its own grid row above the text, reason, buttons, and choice state, so it never covers them.
+  It uses the fixed fill `#0f7b5f` with white text in both themes. It is plain text that assistive tech reads, and a selection input is described by it.
+- The flag is display only. It never changes the sent prompt text, selection rules, relationship validation, or Git-action detection. Cards without it render as before.
 
 ## Goal and new-thread suggestions
 

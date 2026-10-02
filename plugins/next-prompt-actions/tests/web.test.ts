@@ -1550,3 +1550,349 @@ test("Board notifications carry the sending host and never emit legacy events", 
   boardEvent("paseo-board:open", "local", document as unknown as Parameters<typeof boardEvent>[2]);
   assert.deepEqual(received, ["local"]);
 });
+
+type Page = ReturnType<typeof parseHTML>;
+// The client's minimal Node lacks a few DOM members these checks read.
+type El = Node & {
+  classList: { contains(name: string): boolean };
+  firstChild: Node | null;
+  children: ArrayLike<Node>;
+  tagName: string;
+};
+const all = (node: Node, selector: string) => Array.from(node.querySelectorAll(selector)) as El[];
+// Mounts one assistant reply with a real Engine and runs `check` against the folded panel.
+async function withReply(
+  reply: { html: string; message: string; code: string; started?: string[] },
+  check: (page: {
+    document: Page["document"];
+    window: Page["window"];
+    panel: El;
+    sent: string[];
+  }) => Promise<void> | void,
+) {
+  const current: Current = {
+    epoch: "badge",
+    complete: true,
+    busy: false,
+    rows: [
+      { type: "user_message", id: "0", text: "Continue.", timestamp: 1 },
+      { type: "assistant_message", id: "1", text: reply.message, timestamp: 100 },
+    ],
+  };
+  const sent: string[] = [];
+  const engine = new Engine(
+    new Store(),
+    {
+      read: async () => structuredClone(current),
+      send: async (_scope, text) => {
+        sent.push(text);
+      },
+      start: async (_scope, text) => {
+        reply.started?.push(text);
+      },
+    },
+    async () => false,
+  );
+  const { document, window } = parseHTML(
+    `<html><head></head><body><textarea data-composer-input="">draft</textarea><div data-testid="assistant-message">${reply.html}</div></body></html>`,
+  );
+  document.querySelector(
+    '[data-paseo-markdown-tag="pre"] [data-paseo-markdown-tag="code"]',
+  )!.textContent = reply.code;
+  const assistant = document.querySelector('[data-testid="assistant-message"]')!;
+  const before = assistant.innerHTML;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    {
+      inspect: (scope) => engine.inspect(scope),
+      send: async (scope, key) => ({ sent: await engine.send(scope, key) }),
+      start: async (scope, key) => ({ started: await engine.start(scope, key) }),
+    },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message: reply.message }),
+  );
+  try {
+    await pause();
+    const panel = document.querySelector("[data-next-prompt-actions]") as unknown as El;
+    assert.ok(panel, "panel mounted");
+    await check({ document, window, panel, sent });
+  } finally {
+    cleanup();
+    engine.close();
+    assert.equal(assistant.innerHTML, before);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+}
+const nextHtml = `<div data-paseo-markdown-tag="h2"><span>What Next</span></div><div data-paseo-markdown-tag="pre"><span data-paseo-markdown-tag="code"></span></div>`;
+const suggestedBadges = (node: Node) => all(node, ".npa-suggested");
+
+test("a Suggested badge marks only flagged cards, in direct and Other work rows", async () => {
+  const code = [
+    "prompt: Verify the layout.",
+    "suggestion: true",
+    "prompt: Review the spacing.",
+    "prompt: Audit the logs.",
+    "why: Separate issue.",
+    "thread: new",
+    "suggestion: true",
+    "prompt: Check the docs.",
+    "thread: new",
+  ].join("\n");
+  const started: string[] = [];
+  await withReply(
+    { html: nextHtml, message: `## What Next\n\`\`\`text\n${code}\n\`\`\``, code, started },
+    async ({ document, window, panel, sent }) => {
+      const badges = suggestedBadges(panel);
+      assert.equal(badges.length, 2);
+      const direct = all(panel, ".npa-next > .npa-row");
+      const other = all(panel, ".npa-other > .npa-row");
+      assert.equal(direct.length, 2);
+      assert.equal(other.length, 2);
+      assert.equal(direct[0].querySelector(".npa-suggested")?.textContent, "Suggested");
+      assert.equal(other[0].querySelector(".npa-suggested")?.textContent, "Suggested");
+      // Badge is a direct card child, outside the label, so it never joins prompt text.
+      for (const badge of badges)
+        assert.equal(badge.parentElement!.getAttribute("class"), "npa-row");
+      assert.equal(direct[0].querySelector(".npa-label")!.textContent, "Verify the layout.");
+      assert.equal(
+        (other[0].querySelector(".npa-label") as El).firstChild!.textContent,
+        "Audit the logs.",
+      );
+      // Unsuggested cards get no extra node.
+      assert.equal(direct[1].querySelector(".npa-suggested"), null);
+      assert.deepEqual(
+        Array.from(direct[1].children).map((child) => child.getAttribute("class")),
+        ["npa-label", "npa-actions"],
+      );
+      assert.deepEqual(
+        Array.from(other[1].children).map((child) => child.getAttribute("class")),
+        ["npa-label", "npa-actions"],
+      );
+      // Readable by assistive tech.
+      for (const badge of badges) {
+        assert.equal(badge.closest("[aria-hidden]"), null);
+        assert.equal(badge.getAttribute("hidden"), null);
+      }
+      // Edit and Send use the prompt text only.
+      direct[0].querySelector(".npa-edit")!.dispatchEvent(new window.Event("click"));
+      assert.equal(document.querySelector("textarea")!.value, "Verify the layout.");
+      direct[0].querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+      await pause();
+      assert.deepEqual(sent, ["Verify the layout."]);
+      other[0].querySelector(".npa-start")!.dispatchEvent(new window.Event("click"));
+      await pause();
+      assert.deepEqual(started, ["Audit the logs."]);
+    },
+  );
+});
+
+test("a suggested Git action keeps its Commit button and Git guards", async () => {
+  const code = "prompt: Commit the fix.\nsuggestion: true\nprompt: Verify the fix.";
+  await withReply(
+    { html: nextHtml, message: `## What Next\n\`\`\`text\n${code}\n\`\`\``, code },
+    async ({ window, panel, sent }) => {
+      const [first, second] = all(panel, ".npa-row");
+      assert.equal(suggestedBadges(panel).length, 1);
+      assert.ok(first.querySelector(".npa-suggested"));
+      assert.equal(second.querySelector(".npa-suggested"), null);
+      assert.equal(shown(first.querySelector(".npa-send")!), "Commit");
+      first.querySelector(".npa-send")!.dispatchEvent(new window.Event("click"));
+      await pause();
+      assert.match(sent[0], /^\/commit --no-push\nCommit the fix\./);
+      assert.doesNotMatch(sent[0], /suggest/i);
+    },
+  );
+});
+
+test("a Suggested badge marks flagged selection rows without covering state or text", async () => {
+  const block = JSON.stringify({
+    version: 1,
+    prompts: [
+      { id: "implement", prompt: "Implement the layout.", suggestion: true },
+      { id: "review", prompt: "Review only.", why: "Pick this to **check it**." },
+      { id: "risks", prompt: "List remaining risks.", suggestion: true },
+    ],
+    exclusiveGroups: [["implement", "review"]],
+    allowedCombinations: [["implement", "risks"]],
+  });
+  await withReply(
+    { html: nextHtml, message: `## What Next\n\`\`\`next-prompts\n${block}\n\`\`\``, code: block },
+    async ({ document, window, panel, sent }) => {
+      const choices = all(panel, ".npa-choice");
+      assert.equal(choices.length, 3);
+      assert.equal(suggestedBadges(panel).length, 2);
+      assert.equal(choices[0].querySelector(".npa-suggested")?.textContent, "Suggested");
+      assert.equal(choices[1].querySelector(".npa-suggested"), null);
+      assert.equal(choices[2].querySelector(".npa-suggested")?.textContent, "Suggested");
+      for (const choice of [choices[0], choices[2]]) {
+        const badge = choice.querySelector(".npa-suggested")!;
+        assert.equal(badge.parentElement, choice, "a direct row child");
+        assert.equal(badge.closest(".npa-label"), null);
+        assert.equal(badge.closest(".npa-choice-state"), null);
+        assert.equal(badge.closest("[aria-hidden]"), null);
+        assert.ok(choice.querySelector(".npa-choice-state"), "state cell is kept");
+        // The checkbox or radio name is the prompt, and it is described by the badge.
+        const input = choice.querySelector("input")!;
+        assert.equal(document.getElementById(input.getAttribute("aria-describedby")!), badge);
+      }
+      assert.equal(choices[1].querySelector("input")!.getAttribute("aria-describedby"), null);
+      assert.equal(
+        choices[0].querySelector("input")!.getAttribute("aria-label"),
+        "Implement the layout.",
+      );
+      assert.equal(choices[0].querySelector(".npa-label")!.textContent, "Implement the layout.");
+      const radio = choices[0].querySelector("input")!;
+      radio.checked = true;
+      radio.dispatchEvent(new window.Event("change"));
+      const checkbox = choices[2].querySelector("input")!;
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new window.Event("change"));
+      document.querySelector(".npa-selection-edit")!.dispatchEvent(new window.Event("click"));
+      assert.equal(
+        document.querySelector("textarea")!.value,
+        "1. Implement the layout.\n2. List remaining risks.",
+      );
+      document.querySelector(".npa-selection-send")!.dispatchEvent(new window.Event("click"));
+      await pause();
+      assert.deepEqual(sent, ["1. Implement the layout.\n2. List remaining risks."]);
+    },
+  );
+});
+
+test("a Suggested badge shows on read-only cards of earlier replies", async () => {
+  const code = "prompt: Verify the layout.\nsuggestion: true\nprompt: Review spacing.";
+  const row = (id: string, index: number, content: string) =>
+    `<div data-history-row-id="${id}:block:${index}" data-message-id="${id}"><div data-message-text="true" data-testid="assistant-message">${content}</div></div>`;
+  const pre = `<div data-paseo-markdown-tag="pre"><div data-paseo-markdown-tag="code">${code}</div></div>`;
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div id="list">${row("old", 0, '<div data-paseo-markdown-tag="h2"><div>What Next</div></div>')}${row("old", 1, pre)}</div></body></html>`,
+  );
+  const list = document.querySelector("#list")!;
+  const before = list.innerHTML;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    { inspect: async () => ({ ...snapshot, candidates: [] }), send: async () => ({ sent: true }) },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message: "older reply" }),
+  );
+  try {
+    await pause();
+    const panel = document.querySelector("[data-next-prompt-actions]") as unknown as El;
+    assert.equal(panel.getAttribute("data-npa-readonly"), "true");
+    const rows = all(panel, ".npa-row");
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].querySelector(".npa-suggested")?.textContent, "Suggested");
+    assert.equal(rows[1].querySelector(".npa-suggested"), null);
+    assert.equal(rows[0].querySelector(".npa-label")!.textContent, "Verify the layout.");
+    assert.equal(panel.querySelectorAll("button, input").length, 0);
+  } finally {
+    cleanup();
+    assert.equal(list.innerHTML, before);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});
+
+test("the Suggested badge style is fixed, small, and placed on every card shape", async () => {
+  const code = "prompt: Verify.\nsuggestion: true";
+  await withReply(
+    { html: nextHtml, message: `## What Next\n\`\`\`text\n${code}\n\`\`\``, code },
+    ({ document }) => {
+      const css = document.head.querySelector("style")!.textContent!;
+      const rule = css.match(/\.npa-suggested\s*\{([^}]*)\}/)?.[1] ?? "";
+      assert.match(rule, /background:#0f7b5f/);
+      assert.match(rule, /color:#fff/);
+      assert.match(rule, /border-radius:6px/);
+      assert.match(rule, /font-size:11\.5px/);
+      assert.match(rule, /font-weight:600/);
+      assert.match(rule, /white-space:nowrap/);
+      assert.match(rule, /justify-self:end/);
+      assert.doesNotMatch(rule, /position:\s*absolute|var\(--npa-accent\)/);
+      // Dark theme keeps the same fixed background.
+      assert.doesNotMatch(css, /data-npa-theme="dark"\][^{]*\.npa-suggested/);
+    },
+  );
+});
+
+const fiveItem = (value: string) =>
+  `<div data-paseo-markdown-tag="li"><span data-paseo-markdown-ignore="true" data-paseo-markdown-list-marker="true">•</span><div><span>${value}</span></div></div>`;
+const fiveList = (...values: string[]) =>
+  `<div data-paseo-markdown-tag="h2"><span>Recap</span></div><div data-paseo-markdown-tag="ul">${values.map(fiveItem).join("")}</div>`;
+
+test("a five-field Recap folds into the panel with Not yet and Need from you rows", async () => {
+  const block = JSON.stringify({
+    version: 1,
+    prompts: [{ id: "verify", prompt: "Verify the layout." }],
+  });
+  const recap = fiveList(
+    "Branch: main",
+    "Commit/push: yes, committed abc1234",
+    "Did: Rewrote the section.",
+    "Not yet: Needs a device check.",
+    "Need from you: nothing",
+  );
+  const message = `## Recap\n- Branch: main\n- Commit/push: yes, committed abc1234\n- Did: Rewrote the section.\n- Not yet: Needs a device check.\n- Need from you: nothing\n\n## What Next\n\`\`\`next-prompts\n${block}\n\`\`\``;
+  await withReply({ html: recap + nextHtml, message, code: block }, ({ panel }) => {
+    const commit = panel.querySelector(".npa-recap .npa-commit") as El;
+    assert.equal(commit.textContent!.trim(), "committed abc1234");
+    assert.ok(commit.classList.contains("npa-ok"));
+    assert.equal(commit.getAttribute("aria-label"), "Commit/push: yes, committed abc1234");
+    assert.equal(panel.querySelector(".npa-did")!.textContent!.trim(), "Rewrote the section.");
+    const rows = all(panel, ".npa-recap-row");
+    assert.equal(rows.length, 1, "a nothing row is omitted");
+    assert.equal(rows[0].querySelector(".npa-recap-label")!.textContent, "Not yet");
+    assert.equal(rows[0].querySelector(".npa-recap-value")!.textContent, "Needs a device check.");
+    assert.equal(panel.querySelectorAll("[data-paseo-markdown-tag]").length, 0);
+  });
+});
+
+test("a five-field Recap without a prompt block decorates as a stacked strip and restores", async () => {
+  const recap = fiveList(
+    "Branch: main",
+    "Commit/push: no",
+    "Did: Rewrote the section.",
+    "Not yet: nothing",
+    "Need from you: Check the chip.",
+  );
+  const { document, window } = parseHTML(
+    `<html><head></head><body><div data-testid="assistant-message">${recap}<div data-paseo-markdown-tag="h2">Details</div><div data-paseo-markdown-tag="p">Done.</div></div></body></html>`,
+  );
+  const assistant = document.querySelector('[data-testid="assistant-message"]')!;
+  const before = assistant.innerHTML;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "MutationObserver");
+  Object.defineProperty(globalThis, "MutationObserver", {
+    value: window.MutationObserver,
+    configurable: true,
+  });
+  const cleanup = install(
+    { inspect: async () => ({ ...snapshot, candidates: [] }), send: async () => ({ sent: true }) },
+    document as unknown as Parameters<typeof install>[1],
+    () => ({ ...context, message: "Recap reply" }),
+  );
+  try {
+    await pause();
+    const list = document.querySelector("[data-npa-recap]") as unknown as El;
+    assert.notEqual(list.getAttribute("data-npa-recap-stacked"), null);
+    assert.equal(list.querySelectorAll("[data-npa-recap-field]").length, 5);
+    assert.deepEqual(
+      all(list, "[data-npa-recap-empty]").map((field) =>
+        field.getAttribute("data-npa-recap-field"),
+      ),
+      ["not yet"],
+    );
+  } finally {
+    cleanup();
+    assert.equal(assistant.innerHTML, before);
+    if (previous) Object.defineProperty(globalThis, "MutationObserver", previous);
+    else Reflect.deleteProperty(globalThis, "MutationObserver");
+  }
+});

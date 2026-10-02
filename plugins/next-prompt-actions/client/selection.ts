@@ -2,6 +2,14 @@ import type { Candidate, Snapshot } from "../shared/contracts";
 import { selectionAllowed } from "../shared/next-prompts";
 import type { Document, Node } from "./web";
 
+// Display-only mark for a prompt the agent recommends. Plain text, so assistive tech reads it.
+export function suggestedBadge(doc: Document): Node {
+  const badge = doc.createElement("span");
+  badge.setAttribute("class", "npa-suggested");
+  badge.textContent = "Suggested";
+  return badge;
+}
+
 export function renderSelection(
   doc: Document,
   root: Node,
@@ -59,12 +67,19 @@ export function renderSelection(
     const container = containers.get(id)!;
     const row = doc.createElement("label");
     row.setAttribute("class", "npa-choice");
+    const badge = candidate.suggestion ? suggestedBadge(doc) : null;
+    if (badge) {
+      badge.setAttribute("id", `npa-suggested-${candidate.selection!.blockKey}-${id}`);
+      row.appendChild(badge);
+    }
     const input = doc.createElement("input");
     input.setAttribute("type", groupIndex < 0 ? "checkbox" : "radio");
     if (groupIndex >= 0)
       input.setAttribute("name", `npa-${candidate.selection!.blockKey}-${groupIndex}`);
     input.setAttribute("aria-label", candidate.text);
     input.setAttribute("value", id);
+    // The aria-label names the prompt; this adds the badge to what a screen reader announces.
+    if (badge) input.setAttribute("aria-describedby", badge.getAttribute("id")!);
     input.checked = false;
     input.addEventListener("change", () => {
       if (input.disabled || pending) {

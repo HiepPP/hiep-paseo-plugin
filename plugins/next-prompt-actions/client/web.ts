@@ -1,7 +1,7 @@
 import type { Candidate, Scope, Snapshot } from "../shared/contracts";
 import { gitAction, joinPrompts, parsePrompts } from "../shared/prompts";
 import { parseNextPrompts } from "../shared/next-prompts";
-import { renderSelection } from "./selection";
+import { renderSelection, suggestedBadge } from "./selection";
 import { decorateRecap, foldPanel, messageParts, recapStyles, underNextHeading } from "./recap";
 
 export interface Node {
@@ -188,12 +188,14 @@ const styles = `
 [${OWNER}] .npa-commit.npa-ok {--npa-icon:${iconMask(icons.done)};}
 [${OWNER}] .npa-branch-value, [${OWNER}] .npa-commit-value {display:inline-block;}
 [${OWNER}] .npa-commit-value::first-letter {text-transform:uppercase;}
-[${OWNER}] .npa-did {margin:0;max-width:72ch;font-size:14px;line-height:1.6;color:var(--npa-soft);overflow-wrap:anywhere;text-wrap:pretty;}
-[${OWNER}] .npa-did::first-letter {text-transform:uppercase;}
-[${OWNER}] .npa-did *, [${OWNER}] .npa-next-intro * {display:inline!important;margin:0!important;font-size:inherit!important;line-height:inherit!important;}
+[${OWNER}] :is(.npa-did, .npa-recap-value) {margin:0;max-width:72ch;font-size:14px;line-height:1.6;color:var(--npa-soft);overflow-wrap:anywhere;text-wrap:pretty;}
+[${OWNER}] :is(.npa-did, .npa-recap-value)::first-letter {text-transform:uppercase;}
+[${OWNER}] :is(.npa-did, .npa-recap-value) *, [${OWNER}] .npa-next-intro * {display:inline!important;margin:0!important;font-size:inherit!important;line-height:inherit!important;}
 [${OWNER}] .npa-next-intro > * {display:block!important;}
-[${OWNER}] .npa-did [data-npa-list] {display:block!important;}
-[${OWNER}] .npa-did [data-npa-list="li"] {display:flex!important;gap:8px;margin-top:2px!important;}
+[${OWNER}] :is(.npa-did, .npa-recap-value) [data-npa-list] {display:block!important;}
+[${OWNER}] :is(.npa-did, .npa-recap-value) [data-npa-list="li"] {display:flex!important;gap:8px;margin-top:2px!important;}
+[${OWNER}] .npa-recap-row {display:grid;grid-template-columns:96px minmax(0,1fr);gap:0 12px;align-items:baseline;margin-top:8px;}
+[${OWNER}] .npa-recap-label {min-width:0;font-size:12.5px;font-weight:600;line-height:1.6;color:var(--npa-muted);overflow-wrap:anywhere;}
 [${OWNER}] [data-npa-code] {font-family:var(--npa-mono)!important;font-size:.88em!important;padding:1px 5px!important;border-radius:6px;background:var(--npa-chip)!important;color:var(--npa-ink,inherit)!important;}
 [${OWNER}] .npa-chip * {display:inline!important;margin:0!important;padding:0!important;background:none!important;font-size:inherit!important;line-height:inherit!important;}
 [${OWNER}] .npa-next-head {margin-bottom:16px;}
@@ -205,6 +207,9 @@ const styles = `
 [${OWNER}] .npa-label {min-width:0;font-weight:400;white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty;}
 [${OWNER}] .npa-why {display:block;margin-top:4px;font-size:13px;line-height:1.5;font-weight:400;white-space:normal;color:var(--npa-muted);}
 [${OWNER}] .npa-why strong {font-weight:600;color:var(--npa-soft);}
+/* Fixed fill in both themes keeps white text above AA contrast. Its own grid row at the card's top
+   right can never overlap the label, reason, buttons, or choice state. */
+[${OWNER}] .npa-suggested {grid-column:1/-1;grid-row:1;justify-self:end;align-self:start;display:inline-flex;align-items:center;min-height:20px;margin-bottom:-6px;padding:0 8px;border-radius:6px;background:#0f7b5f;color:#fff;font-size:11.5px;font-weight:600;line-height:1.3;white-space:nowrap;}
 [${OWNER}] .npa-actions {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;}
 [${OWNER}] button {display:inline-flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;min-height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--npa-line-strong);background:var(--npa-paper,transparent);color:var(--npa-ink,inherit);font-family:inherit;font-size:13px;font-weight:500;line-height:1;white-space:nowrap;cursor:pointer;user-select:none;transition:background-color .15s ease,border-color .15s ease,transform .1s ease;}
 [${OWNER}] button::before {content:"";width:14px;height:14px;flex-shrink:0;background:currentColor;mask:var(--npa-icon) center / contain no-repeat;}
@@ -282,6 +287,7 @@ const styles = `
   [${OWNER}] .npa-selection-footer {padding:12px 16px;}
   [${OWNER}] .npa-row {grid-template-columns:minmax(0,1fr);}
   [${OWNER}] .npa-next-intro {margin-left:0;}
+  [${OWNER}] .npa-recap-row {grid-template-columns:minmax(0,1fr);gap:2px;}
 }
 `;
 
@@ -400,6 +406,7 @@ export function install(controller: Controller, doc: Document = document, identi
       text,
       why: parsed.whys[index] || undefined,
       ...(parsed.threads[index] ? { thread: "new" as const } : {}),
+      ...(parsed.suggestions?.[index] ? { suggestion: true } : {}),
       ...(parsed.declaration?.goal ? { goal: parsed.declaration.goal } : {}),
       source: context.message,
       timestamp: context.timestamp,
@@ -581,6 +588,7 @@ export function install(controller: Controller, doc: Document = document, identi
       for (const candidate of others) {
         const row = doc.createElement("div");
         row.setAttribute("class", "npa-row");
+        if (candidate.suggestion) row.appendChild(suggestedBadge(doc));
         row.appendChild(promptLabel(candidate));
         if (!readonly && controller.start) {
           const actions = doc.createElement("div");
@@ -667,6 +675,7 @@ export function install(controller: Controller, doc: Document = document, identi
       for (const candidate of local) {
         const row = doc.createElement("div");
         row.setAttribute("class", "npa-row");
+        if (candidate.suggestion) row.appendChild(suggestedBadge(doc));
         row.appendChild(promptLabel(candidate));
         section.appendChild(row);
       }
@@ -702,6 +711,7 @@ export function install(controller: Controller, doc: Document = document, identi
       const git = gitActions[index];
       const row = doc.createElement("div");
       row.setAttribute("class", "npa-row");
+      if (candidate.suggestion) row.appendChild(suggestedBadge(doc));
       row.appendChild(promptLabel(candidate));
       const actions = doc.createElement("div");
       actions.setAttribute("class", "npa-actions");

@@ -13,6 +13,8 @@ export const recapStyles = `
 [data-npa-recap-field="did"] {max-width:68ch;}
 [data-npa-recap-stacked] {grid-template-columns:minmax(0,max-content) minmax(0,max-content);row-gap:10px!important;}
 [data-npa-recap-stacked] > [data-npa-recap-field="did"] {grid-area:2/1/3/-1;padding:0!important;border-left:0;}
+[data-npa-recap-stacked] > [data-npa-recap-field="not yet"], [data-npa-recap-stacked] > [data-npa-recap-field="need from you"] {grid-column:1/-1;max-width:68ch;padding:0!important;border-left:0;}
+[data-npa-recap-field][data-npa-recap-empty] {display:none!important;}
 [data-npa-recap-field]:first-child {padding-left:0!important;border-left:0;}
 [data-npa-recap-field]:last-child {padding-right:0!important;}
 [data-npa-recap-field] * {font-size:inherit!important;line-height:inherit!important;}
@@ -23,8 +25,71 @@ export const recapStyles = `
 @media(max-width:800px) {
   [data-npa-recap] {grid-template-columns:minmax(0,1fr);gap:10px!important;}
   [data-npa-recap-field] {padding:0!important;border-left:0;}
+  /* One column: a pinned Did would jump above Commit/push. */
+  [data-npa-recap-stacked] > [data-npa-recap-field="did"] {grid-area:auto;}
 }
 `;
+
+// One Recap field: a list item, or one labeled line plus the list block that follows it.
+type Field = { node: Node; list?: Node };
+
+const legacyLabels = ["Branch", "Did", "Commit/push"];
+const fullLabels = ["Branch", "Commit/push", "Did", "Not yet", "Need from you"];
+const labelLine = /^(Branch|Commit\/push|Did|Not yet|Need from you):\s*(\S[\s\S]*)?$/i;
+const labelPrefix = /^\s*(?:Branch|Did|Commit\/push|Not yet|Need from you):\s*/i;
+// Only free-text fields hold a list: nested in the item, or as the block after the line.
+const freeText = new Set(["did", "not yet", "need from you"]);
+
+const plain = (node: Node) => (node.textContent ?? "").replace(/^\s*[•*-]?\s*/, "").trim();
+const nestedLists = (node: Node) =>
+  Array.from(node.querySelectorAll(`[${TAG}="ul"], [${TAG}="ol"]`));
+/** True when a free-text field says there is nothing to report. */
+const saysNothing = (field: Field) =>
+  !field.list && /^nothing\.?$/i.test(labelLine.exec(plain(field.node))?.[2] ?? "");
+
+/**
+ * Label order of a recognised Recap, else null: the legacy Branch, Did, Commit/push or the five
+ * fields. An empty value needs a list. Lists may be nested in, or follow, free-text fields only;
+ * a following list exists only in the five-field shape.
+ */
+function recapLabels(fields: Field[], nested: Node[]): string[] | null {
+  const labels = fields.length === 3 ? legacyLabels : fields.length === 5 ? fullLabels : null;
+  if (!labels) return null;
+  const holds = (index: number) => freeText.has(labels[index].toLowerCase());
+  if (fields.some((field, index) => field.list && (labels === legacyLabels || !holds(index))))
+    return null;
+  if (
+    !nested.every((node) =>
+      fields.some((field, index) => holds(index) && field.node.contains?.(node)),
+    )
+  )
+    return null;
+  return fields.every((field, index) => {
+    const match = labelLine.exec(plain(field.node));
+    return match?.[1].toLowerCase() === labels[index].toLowerCase() && !!(match[2] || field.list);
+  })
+    ? labels
+    : null;
+}
+
+// One top-level list holds the fields as items. Otherwise they are labeled lines, and a list block
+// directly after a line belongs to that line's field.
+function recapFields(blocks: Node[]): { fields: Field[]; nested: Node[] } | null {
+  if (blocks.length === 1 && blocks[0].getAttribute(TAG) === "ul")
+    return {
+      fields: items(blocks[0]).map((node) => ({ node })),
+      nested: nestedLists(blocks[0]),
+    };
+  const fields: Field[] = [];
+  for (const [index, block] of blocks.entries()) {
+    const tag = block.getAttribute(TAG) ?? "";
+    if (tag === "p") fields.push(...lines(block).map((node) => ({ node })));
+    else if (/^[uo]l$/.test(tag) && blocks[index - 1]?.getAttribute(TAG) === "p")
+      fields[fields.length - 1].list = block;
+    else return null;
+  }
+  return { fields, nested: [] };
+}
 
 /** Decorate known Markdown shapes without moving React-owned nodes or changing copy text. */
 export function decorateRecap(message: Node): (() => void) | null {
@@ -51,19 +116,10 @@ export function decorateRecap(message: Node): (() => void) | null {
   });
   if (topBlocks.length !== 1 || topBlocks[0].getAttribute(TAG) !== "ul") return null;
   const list = topBlocks[0];
-  const fields = items(list);
-  // Only Did may carry a nested list, e.g. one bullet per change.
-  const nested = Array.from(list.querySelectorAll(`[${TAG}="ul"], [${TAG}="ol"]`));
-  if (fields.length !== 3 || !nested.every((node) => fields[1].contains?.(node))) return null;
-  const labels = ["branch", "did", "commit/push"];
-  if (
-    !fields.every((field, index) => {
-      const content = (field.textContent ?? "").replace(/^\s*[•*-]?\s*/, "");
-      const match = /^(Branch|Did|Commit\/push):\s*([\s\S]+)$/i.exec(content.trim());
-      return match?.[1].toLowerCase() === labels[index] && !!match[2].trim();
-    })
-  )
-    return null;
+  const fields = items(list).map((node) => ({ node }));
+  const nested = nestedLists(list);
+  const labels = recapLabels(fields, nested);
+  if (!labels) return null;
   const changed: { node: Node; name: string; before: string | null }[] = [];
   const mark = (node: Node, name: string, value: string) => {
     changed.push({ node, name, before: node.getAttribute(name) });
@@ -71,9 +127,15 @@ export function decorateRecap(message: Node): (() => void) | null {
   };
   mark(nodes[start], "data-npa-recap-heading", "true");
   mark(list, "data-npa-recap", "true");
-  // Bullets in a middle column wrap to a few words per line; give Did its own row.
-  if (nested.length) mark(list, "data-npa-recap-stacked", "true");
-  fields.forEach((field, index) => mark(field, "data-npa-recap-field", labels[index]));
+  // Bullets in a middle column wrap to a few words per line; give Did its own row. The five
+  // fields always stack: Branch and Commit/push, then each free-text field on its own row.
+  if (nested.length || labels === fullLabels) mark(list, "data-npa-recap-stacked", "true");
+  fields.forEach((field, index) => {
+    const name = labels[index].toLowerCase();
+    mark(field.node, "data-npa-recap-field", name);
+    if (/^(?:not yet|need from you)$/.test(name) && saysNothing(field))
+      mark(field.node, "data-npa-recap-empty", "true");
+  });
   return () => {
     for (const { node, name, before } of changed) {
       if (before === null) node.removeAttribute(name);
@@ -136,14 +198,14 @@ function copy(node: Node) {
   return clone;
 }
 
-function stripLabel(node: Node): boolean {
+function stripLabel(node: Node, prefix = labelPrefix): boolean {
   for (const child of Array.from(node.childNodes ?? [])) {
     if (child.nodeType === 3) {
       if (!child.nodeValue?.trim()) continue;
-      child.nodeValue = child.nodeValue.replace(/^\s*(?:Branch|Did|Commit\/push):\s*/i, "");
+      child.nodeValue = child.nodeValue.replace(prefix, "");
       return true;
     }
-    if (stripLabel(child)) return true;
+    if (stripLabel(child, prefix)) return true;
   }
   return false;
 }
@@ -180,29 +242,10 @@ function precedingRecap(tops: Node[], end: number) {
   )
     return null;
   const paragraphs = tops.slice(start, end);
-  const list =
-    paragraphs.length === 1 && paragraphs[0].getAttribute(TAG) === "ul" ? paragraphs[0] : null;
-  if (!list && !paragraphs.every((node) => node.getAttribute(TAG) === "p")) return null;
-  const fields = list ? items(list) : paragraphs.flatMap(lines);
-  if (
-    list &&
-    Array.from(list.querySelectorAll(`[${TAG}="ul"], [${TAG}="ol"]`)).some(
-      (node) => !fields[1]?.contains?.(node),
-    )
-  )
-    return null;
-  const labels = ["Branch", "Did", "Commit/push"];
-  if (
-    fields.length !== 3 ||
-    !fields.every((field, index) => {
-      const match = /^(Branch|Did|Commit\/push):\s*(\S[\s\S]*)$/i.exec(
-        (field.textContent ?? "").replace(/^\s*[•*-]?\s*/, "").trim(),
-      );
-      return match?.[1].toLowerCase() === labels[index].toLowerCase();
-    })
-  )
-    return null;
-  return { title, paragraphs, fields };
+  const parsed = recapFields(paragraphs);
+  const labels = parsed && recapLabels(parsed.fields, parsed.nested);
+  if (!parsed || !labels) return null;
+  return { title, paragraphs, fields: parsed.fields, labels };
 }
 
 /** True when the nearest heading before `block` in the same reply is What Next or Next Steps. */
@@ -254,10 +297,16 @@ export function foldPanel(
     node.setAttribute("aria-hidden", "true");
     return node;
   };
-  const value = (field: Node, into: Node) => {
-    const clone = copy(field);
+  const value = ({ node, list }: Field, into: Node) => {
+    const clone = copy(node);
     stripLabel(clone);
     for (const child of Array.from(clone.childNodes ?? [])) into.appendChild(child);
+    if (list) {
+      // A list block after a labeled line reads like the nested bullets of a list item.
+      const bullets = copy(list);
+      bullets.setAttribute("data-npa-list", list.getAttribute(TAG) ?? "ul");
+      into.appendChild(bullets);
+    }
     return into;
   };
   // The reply declared its goal done; everything suggested after it only closes or leaves the task.
@@ -270,7 +319,7 @@ export function foldPanel(
   const hidden = [title, ...intro];
   const parsed = precedingRecap(tops, index);
   // Host layout classes (flex, width, pre-wrap) squeeze chip text into one word per line.
-  const chip = (field: Node, name: string) => {
+  const chip = (field: Field, name: string) => {
     const into = value(field, element("span", name));
     for (const inner of Array.from(into.querySelectorAll("*"))) {
       inner.removeAttribute("class");
@@ -279,9 +328,10 @@ export function foldPanel(
     return into;
   };
   if (parsed) {
-    const { title: recapTitle, paragraphs, fields } = parsed;
+    const { title: recapTitle, paragraphs, fields, labels } = parsed;
     hidden.unshift(recapTitle, ...paragraphs);
-    const [branch, did, commit] = fields;
+    const field = (label: string) => fields[labels.indexOf(label)];
+    const [branch, did, commit] = [field("Branch"), field("Did"), field("Commit/push")];
     const recap = element("div", "npa-section npa-recap");
     recap.setAttribute("role", "group");
     recap.setAttribute("aria-label", "Recap");
@@ -296,19 +346,37 @@ export function foldPanel(
     meta.appendChild(branchChip);
     const shown = chip(commit, "npa-commit-value");
     const said = shown.textContent?.trim() ?? "";
+    const yes = /^yes\b/i.test(said);
     const status = element(
       "span",
-      /^(?:committed|pushed)\b/i.test(said) ? "npa-chip npa-commit npa-ok" : "npa-chip npa-commit",
+      yes || /^(?:committed|pushed)\b/i.test(said)
+        ? "npa-chip npa-commit npa-ok"
+        : "npa-chip npa-commit",
     );
     status.setAttribute("aria-label", `Commit/push: ${said}`);
+    // `yes` only confirms; the chip shows the detail after it.
+    if (yes) {
+      stripLabel(shown, /^\s*yes\b[\s,;:.\u2013\u2014-]*/i);
+      // Leftover punctuation alone (`yes!`) is not a detail.
+      if (!/[\p{L}\p{N}]/u.test(shown.textContent ?? "")) shown.textContent = "Committed";
+    }
     // State reads from the icon and wording, not an extra hue (TASTE.md).
-    status.appendChild(/^none\.?$/i.test(said) ? element("span", "", "No commit") : shown);
+    status.appendChild(/^(?:no|none)\.?$/i.test(said) ? element("span", "", "No commit") : shown);
     meta.appendChild(status);
     if (done) meta.appendChild(goal());
     head.appendChild(meta);
     recap.appendChild(head);
-    const bullets = did.querySelector(`[${TAG}="ul"], [${TAG}="ol"]`);
+    const bullets = did.list ?? did.node.querySelector(`[${TAG}="ul"], [${TAG}="ol"]`);
     recap.appendChild(value(did, element(bullets ? "div" : "p", "npa-did")));
+    // A field that says nothing needs no row.
+    for (const label of ["Not yet", "Need from you"]) {
+      const open = field(label);
+      if (!open || saysNothing(open)) continue;
+      const row = element("div", "npa-recap-row");
+      row.appendChild(element("span", "npa-recap-label", label));
+      row.appendChild(value(open, element("div", "npa-recap-value")));
+      recap.appendChild(row);
+    }
     panel.prepend!(recap);
     added.push(recap);
   }
