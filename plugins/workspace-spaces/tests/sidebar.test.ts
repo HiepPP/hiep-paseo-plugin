@@ -438,3 +438,21 @@ test("heading follows selection, survives host rerenders, and restores on cleanu
   assert.equal(heading.hasAttribute("data-paseo-space-heading"), false);
   assert.equal(heading.hasAttribute("title"), false);
 });
+test("strip shows the selected Space name and takes the sidebar's text colour", async () => {
+  const f = setup(),
+    d = f.document;
+  const name = () => d.querySelector(".paseo-spaces-name")?.textContent;
+  assert.equal(name(), "Workspace 1");
+  (d.querySelector('[aria-label="Workspace 2"]') as unknown as { click(): void }).click();
+  assert.equal(name(), "Workspace 2");
+  Object.assign(d.defaultView ?? f.window, {
+    getComputedStyle: () => ({ color: "rgb(230, 230, 230)" }),
+  });
+  f.mutations();
+  await Promise.resolve();
+  const bar = d.querySelector('[data-testid="spaces-sidebar-controls"]') as unknown as {
+    style: { getPropertyValue(n: string): string };
+  };
+  assert.equal(bar.style.getPropertyValue("color"), "rgb(230, 230, 230)");
+  f.cleanup();
+});
