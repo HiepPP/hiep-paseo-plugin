@@ -15,7 +15,18 @@ The same tab menu (also opened with Delete) lets you remove that Space.
 Its projects move atomically to the preceding Space, or the next one when removing the first.
 For example, removing Space 2 moves its projects to Space 1.
 The last Space cannot be removed. A failed save preserves both the Space and its memberships.
-Clicking tabs also works. The main chat stays open and running agents are untouched.
+Press **Ctrl+1** to **Ctrl+9** on macOS, or **Ctrl+Shift+1** to **Ctrl+Shift+9** on Windows and
+Linux, to jump to Space 1 to 9. These keys avoid Paseo's own bindings (Cmd+digit and Cmd+Alt+digit
+on macOS, Ctrl+digit and Alt+digit elsewhere) and are ignored while typing in a text field or a
+terminal. Clicking tabs also works. The main chat stays open and running agents are untouched.
+
+A tab whose Space holds a project that needs you carries a badge, so hiding a project never hides
+an agent waiting on you. It shows that Space's most urgent state, in Paseo's own order and colors:
+an amber dot for a pending permission, a red dot for a failed agent, a pulsing blue dot while an
+agent runs, and a green dot for a finished turn not yet seen. The tab's tooltip and accessible name
+say why, for example "Workspace 2: an agent needs permission". The selected Space shows no badge:
+its rows already carry the native status. Badges come from the daemon's workspace status, polled
+every 3 seconds while the window is visible, and cover projects of the host running this plugin.
 
 ## Implementation and limits
 
@@ -28,7 +39,8 @@ Browser and native mobile clients keep the standalone Spaces page as a fallback.
 Project view IDs group rows across connected hosts, including equivalent projects.
 Settings belong to the daemon where this plugin is installed, with revision-checked atomic saves.
 Install on one host per desktop: the first active adapter owns the shared sidebar and others do not
-compete. Space selection resets to the first remaining Space on reload. Project membership survives reload,
+compete. The selected Space survives reload; it is stored by this desktop app, not in
+the host settings, and falls back to the first Space when it was removed meanwhile. Project membership survives reload,
 disable, and updates. Removing the registration deletes its settings.
 New project groups default to the first remaining Space. Project rows with unrecognized DOM structure are left
 visible. Settings/catalog errors reveal hidden groups instead of leaving projects inaccessible.
@@ -38,7 +50,7 @@ Existing native sidebar filters still apply; Spaces do not reveal rows the app a
 Native keyboard shortcuts, search, and history retain their normal global behavior.
 
 A MutationObserver restores controls when the sidebar rerenders. Disabling removes the observer,
-timer, wheel listener, injected menus, styles, visibility attributes, and footer controls.
+refresh and activity timers, wheel and keyboard listeners, injected menus, styles, visibility attributes, and footer controls.
 Switching Spaces slides the project list out and the destination list in over 170 ms, following the direction
 of travel. The numbered controls stay fixed. Reduced-motion preferences skip the animation.
 Disabling cancels any active animation. Real trackpad hardware remains a manual acceptance check.
@@ -57,9 +69,9 @@ paseo plugin ls workspace-spaces --json
 paseo plugin logs workspace-spaces
 ```
 
-DOM tests cover scoped wheel events, project filtering, rerenders, errors, menu extension,
+DOM tests cover activity badges and their labels, scoped wheel events, project filtering, rerenders, errors, menu extension,
 success-only menu dismissal, Space removal, last-Space protection, and cleanup.
-State tests cover stable identities, invalid settings, pagination, revision conflicts, gesture boundaries,
+DOM tests also cover restoring the selected Space after reload and the Space shortcuts. State tests cover stable identities, invalid settings, pagination, revision conflicts, gesture boundaries,
 and project reassignment when removing a Space.
 Live desktop checks cover project moves, filtered tabs, and restoring the original sidebar on disable.
 

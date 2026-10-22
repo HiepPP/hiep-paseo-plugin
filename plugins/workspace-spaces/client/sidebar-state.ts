@@ -1,6 +1,8 @@
 import { settingsRpc } from "@getpaseo/plugin";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import {
+  activityPriority,
+  activityRpc,
   addSpace,
   removeSpace,
   renameSpace,
@@ -8,6 +10,7 @@ import {
   moveProject,
   projectKey,
   stateSchema,
+  type Activity,
   type SpacesState,
 } from "../shared/spaces";
 
@@ -44,6 +47,27 @@ export function viewMembership(state: SpacesState, key: string, project?: Sideba
       ? sidebarMembership(state, project.id)
       : state.spaces[0].id;
 }
+// Catalog projects resolve membership the same way their sidebar rows do.
+export function projectMembership(state: SpacesState, project: SidebarProject): string {
+  return project.viewKey
+    ? viewMembership(state, project.viewKey, project)
+    : sidebarMembership(state, project.id);
+}
+export function spaceActivity(
+  state: SpacesState,
+  projects: SidebarProject[],
+  activity: Record<string, Activity>,
+): Record<string, Activity> {
+  const spaces: Record<string, Activity> = {};
+  for (const project of projects) {
+    const current = activity[project.id];
+    if (!current) continue;
+    const space = projectMembership(state, project);
+    const best = spaces[space];
+    if (!best || activityPriority[current] < activityPriority[best]) spaces[space] = current;
+  }
+  return spaces;
+}
 export function matchProject(key: string, projects: SidebarProject[]) {
   const equivalent = projects.find((p) => p.viewKey === key);
   if (equivalent) return equivalent;
@@ -58,6 +82,8 @@ export function matchProject(key: string, projects: SidebarProject[]) {
 export function createSidebarController(client: Pick<PluginClientContext, "rpc">) {
   const contract = settingsRpc("spaces");
   let snapshot: SidebarSnapshot | null = null;
+  let activity: Record<string, Activity> = {};
+  let activityLoading = false;
   let loadError = "";
   let revision = "",
     stopped = false,
@@ -92,6 +118,21 @@ export function createSidebarController(client: Pick<PluginClientContext, "rpc">
       emit();
     }
   }
+  // A failed poll keeps the last known activity: dropping it would hide a pending permission.
+  async function refreshActivity() {
+    if (stopped || activityLoading) return;
+    activityLoading = true;
+    try {
+      const next = (await client.rpc(activityRpc, {})).projects;
+      if (stopped || JSON.stringify(next) === JSON.stringify(activity)) return;
+      activity = next;
+      emit();
+    } catch {
+      /* Retried on the next poll. */
+    } finally {
+      activityLoading = false;
+    }
+  }
   async function save(change: (s: SpacesState) => SpacesState) {
     if (!snapshot || snapshot.busy || loading || stopped) return false;
     snapshot = { ...snapshot, busy: true, error: "" };
@@ -119,6 +160,8 @@ export function createSidebarController(client: Pick<PluginClientContext, "rpc">
   return {
     get: () => snapshot,
     getLoadError: () => loadError,
+    getActivity: () => activity,
+    refreshActivity,
     subscribe(fn: () => void) {
       listeners.add(fn);
       return () => {
