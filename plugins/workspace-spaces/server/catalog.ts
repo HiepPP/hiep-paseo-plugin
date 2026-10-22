@@ -1,4 +1,6 @@
-import type { PaseoApi } from "@getpaseo/client";
+import type { PluginHandlerContext } from "@getpaseo/plugin/server";
+
+type PaseoApi = PluginHandlerContext["paseo"];
 export async function loadCatalog(paseo: Pick<PaseoApi, "projects" | "workspaces">) {
   const { projects } = await paseo.projects.list();
   const rows = new Map(
