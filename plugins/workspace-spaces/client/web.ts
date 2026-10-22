@@ -27,8 +27,8 @@ export function bindWheel(element: unknown, switchSpace: (direction: number) => 
 }
 
 import type { SidebarController } from "./sidebar-state";
-import { matchProject, sidebarMembership, viewMembership } from "./sidebar-state";
-import { adjacent, removalTarget } from "../shared/spaces";
+import { matchProject, sidebarMembership, spaceActivity, viewMembership } from "./sidebar-state";
+import { activityLabels, adjacent, removalTarget } from "../shared/spaces";
 
 // Desktop-only DOM adapter. No DOM globals leak into the native client bundle.
 interface SlideAnimation {
@@ -72,6 +72,7 @@ interface DomEvent {
   preventDefault(): void;
 }
 export interface DomDocument extends DomNode {
+  visibilityState?: string;
   defaultView?: {
     matchMedia?(query: string): { matches: boolean };
     getComputedStyle?(node: DomNode): { color: string };
@@ -98,6 +99,12 @@ function adoptTextColor(doc: DomDocument, target: DomNode, source: DomNode | nul
   const text = source?.querySelector('[dir="auto"]') ?? source;
   const color = text ? doc.defaultView?.getComputedStyle?.(text).color : undefined;
   if (color) target.style.setProperty("color", color);
+  return color;
+}
+// Light text means a dark sidebar, which takes the host's brighter status dot palette.
+function isLight(color: string) {
+  const [r, g, b] = (color.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+  return b !== undefined && 0.299 * r + 0.587 * g + 0.114 * b > 140;
 }
 
 export function supportsSidebarInjection() {
@@ -123,6 +130,19 @@ export function mountSidebar(
   css.textContent = `[${HIDDEN}]{display:none!important}.paseo-spaces-bar{flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;gap:0;border-top:1px solid #8883;font:13px system-ui;color:inherit}.paseo-spaces-tabs{display:flex;gap:4px;overflow-x:auto;padding:2px}.paseo-spaces-bar [role=status]:empty{display:none}.paseo-spaces-bar .paseo-spaces-tabs button{min-width:26px;height:26px;padding:0 7px;border-radius:6px;font-size:12px;line-height:24px}.paseo-spaces-bar button,.paseo-spaces-menu button{font:inherit;color:inherit;background:transparent;border:1px solid #8883;border-radius:8px;padding:8px 12px;cursor:pointer;flex-shrink:0}.paseo-spaces-bar button[aria-selected=true]{background:#7660de;color:white;border-color:transparent}.paseo-spaces-bar button:focus-visible,.paseo-spaces-menu button:focus-visible{outline:2px solid #7660de;outline-offset:2px}.paseo-spaces-menu{display:flex;flex-direction:column;gap:2px;border-top:1px solid #8883;margin-top:4px;padding:6px 4px 2px;font:12px/1.3 system-ui;color:inherit}.paseo-spaces-menu>div{padding:2px 8px 5px;font-size:10px;font-weight:500;opacity:.6}.paseo-spaces-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:28px;padding:5px 8px;border:0;border-radius:5px;text-align:left;font:inherit;line-height:18px}.paseo-spaces-menu button:hover:not(:disabled){background:#8882}.paseo-spaces-menu button[aria-checked=true]{background:#7660de14;font-weight:500}.paseo-spaces-menu button[aria-checked=true]::after{content:"✓";font-size:12px;color:#8b79df}.paseo-spaces-bar button:disabled,.paseo-spaces-menu button:disabled{opacity:.5;cursor:default}`;
   css.textContent +=
     "[data-paseo-space-heading]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}";
+  // Colors mirror Paseo's statusDot theme tokens for light and dark sidebars.
+  css.textContent +=
+    ".paseo-spaces-tabs button{position:relative}.paseo-spaces-tabs{padding-top:5px}" +
+    ".paseo-spaces-bar{--spaces-needs-input:#b37824;--spaces-failed:#f12e2f;--spaces-running:#268ae0;--spaces-attention:#299f51}" +
+    ".paseo-spaces-bar[data-tone=dark]{--spaces-needs-input:#db932e;--spaces-failed:#f7796d;--spaces-running:#5caaf6;--spaces-attention:#35c264}" +
+    ".paseo-spaces-badge{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;pointer-events:none}" +
+    ".paseo-spaces-badge[data-activity=needs_input]{width:13px;height:13px;top:-6px;right:-6px;background:var(--spaces-needs-input);color:#fff;font:700 9px/13px system-ui;text-align:center}" +
+    ".paseo-spaces-badge[data-activity=needs_input]::before{content:'!'}" +
+    ".paseo-spaces-badge[data-activity=failed]{background:var(--spaces-failed)}" +
+    ".paseo-spaces-badge[data-activity=running]{background:var(--spaces-running);animation:paseo-spaces-pulse 1.4s ease-in-out infinite}" +
+    ".paseo-spaces-badge[data-activity=attention]{background:var(--spaces-attention)}" +
+    "@keyframes paseo-spaces-pulse{50%{opacity:.35}}" +
+    "@media (prefers-reduced-motion:reduce){.paseo-spaces-badge{animation:none!important}}";
   doc.head.appendChild(css);
   const bar = doc.createElement("div");
   bar.setAttribute("class", "paseo-spaces-bar");
@@ -298,11 +318,12 @@ export function mountSidebar(
         unbindWheel = () => target.removeEventListener("wheel", listener);
       }
     }
-    adoptTextColor(
+    const color = adoptTextColor(
       doc,
       bar,
       scroll?.querySelector('[data-testid^="sidebar-project-row-"]') ?? null,
     );
+    if (color) bar.setAttribute("data-tone", isLight(color) ? "dark" : "light");
     if (!snap) {
       const message = controller.getLoadError();
       if (message && signature !== message) {
@@ -323,7 +344,12 @@ export function mountSidebar(
     }
     updateHeading(snap.error ? null : snap.state.spaces.find((space) => space.id === active)!.name);
     previousOrder = snap.state.spaces.map((s) => s.id);
-    const stamp = JSON.stringify([active, snap.state.spaces, snap.busy, snap.error]);
+    // Rows of the current Space are visible, so only other Spaces carry a badge.
+    const activity = snap.error
+      ? {}
+      : spaceActivity(snap.state, snap.projects, controller.getActivity());
+    delete activity[active];
+    const stamp = JSON.stringify([active, snap.state.spaces, snap.busy, snap.error, activity]);
     if (stamp !== signature) {
       signature = stamp;
       tabs.textContent = "";
@@ -331,8 +357,18 @@ export function mountSidebar(
       for (const [index, space] of snap.state.spaces.entries()) {
         const b = button(tabs, String(index + 1), () => select(space.id));
         b.setAttribute("role", "tab");
-        b.setAttribute("aria-label", space.name);
-        b.setAttribute("title", space.name);
+        b.setAttribute("data-testid", `spaces-tab-${space.id}`);
+        const reason = activity[space.id];
+        const label = reason ? `${space.name}: ${activityLabels[reason]}` : space.name;
+        b.setAttribute("aria-label", label);
+        b.setAttribute("title", label);
+        if (reason) {
+          const badge = doc.createElement("span");
+          badge.setAttribute("class", "paseo-spaces-badge");
+          badge.setAttribute("data-activity", reason);
+          badge.setAttribute("aria-hidden", "true");
+          b.appendChild(badge);
+        }
         b.setAttribute("aria-selected", String(space.id === active));
         const openActions = () => {
           closeActions();
@@ -552,10 +588,16 @@ export function mountSidebar(
   const timer = setInterval(() => {
     void controller.refresh();
   }, 15000);
+  // Statuses change within seconds; a hidden window has no badge to show.
+  void controller.refreshActivity();
+  const activityTimer = setInterval(() => {
+    if (doc.visibilityState !== "hidden") void controller.refreshActivity();
+  }, 3000);
   return () => {
     stopped = true;
     cancelSlide();
     clearInterval(timer);
+    clearInterval(activityTimer);
     observer.disconnect();
     unsubscribe();
     unbindWheel();

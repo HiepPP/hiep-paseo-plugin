@@ -36,6 +36,28 @@ export const catalogRpc = defineRpc({
     ),
   }),
 });
+// Ordered like the daemon's workspace status buckets: lower needs the user sooner.
+const activitySchema = z.enum(["needs_input", "failed", "running", "attention"]);
+export type Activity = z.infer<typeof activitySchema>;
+export const activityPriority: Record<Activity, number> = {
+  needs_input: 0,
+  failed: 1,
+  running: 2,
+  attention: 3,
+};
+export const activityLabels: Record<Activity, string> = {
+  needs_input: "an agent needs permission",
+  failed: "an agent failed",
+  running: "an agent is running",
+  attention: "an agent finished, not yet seen",
+};
+export const activityRpc = defineRpc({
+  name: "spaces.activity",
+  input: z.object({}),
+  output: z.object({
+    projects: z.record(z.string(), activitySchema),
+  }),
+});
 export const projectKey = (host: string, project: string) => JSON.stringify([host, project]);
 export const membership = (state: SpacesState, key: string) =>
   Object.hasOwn(state.members, key) ? state.members[key] : state.spaces[0].id;

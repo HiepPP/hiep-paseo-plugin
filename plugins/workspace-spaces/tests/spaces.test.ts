@@ -11,7 +11,7 @@ import {
   stateSchema,
 } from "../shared/spaces";
 import { createWheelGesture, touchDirection } from "../client/gesture";
-import { loadCatalog } from "../server/catalog";
+import { loadActivity, loadCatalog } from "../server/catalog";
 import type { PaseoApi } from "@getpaseo/client";
 
 test("default membership and host identity survive round trips", () => {
@@ -194,4 +194,31 @@ test("renaming trims names and preserves identities and membership", () => {
   assert.equal(state.spaces[1].name, "Workspace 2");
   assert.throws(() => renameSpace(state, "space-2", " \n "), /Enter a workspace name/);
   assert.throws(() => renameSpace(state, "missing", "Work"), /no longer exists/);
+});
+
+test("activity keeps each project's most urgent workspace status across pages", async () => {
+  let calls = 0;
+  const fake = {
+    workspaces: {
+      list: async () =>
+        ++calls === 1
+          ? {
+              entries: [
+                { id: "w1", projectId: "p", name: "One", status: "running" },
+                { id: "w2", projectId: "q", name: "Two", status: "done" },
+                { id: "w3", projectId: "r", name: "Three", status: "future_bucket" },
+              ],
+              pageInfo: { hasMore: true, nextCursor: "next" },
+            }
+          : {
+              entries: [
+                { id: "w4", projectId: "p", name: "Four", status: "needs_input" },
+                { id: "w5", projectId: "q", name: "Five", status: "attention" },
+                { id: "w6", projectId: "p", name: "Six", status: "failed" },
+              ],
+              pageInfo: { hasMore: false, nextCursor: null },
+            },
+    },
+  } as unknown as Pick<PaseoApi, "workspaces">;
+  assert.deepEqual(await loadActivity(fake), { projects: { p: "needs_input", q: "attention" } });
 });

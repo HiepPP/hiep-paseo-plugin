@@ -6,6 +6,7 @@ import {
   createSidebarController,
   matchProject,
   sidebarMembership,
+  spaceActivity,
   type SidebarController,
   type SidebarSnapshot,
 } from "../client/sidebar-state";
@@ -16,6 +17,7 @@ import {
   removeSpace,
   renameSpace,
   stateSchema,
+  type Activity,
 } from "../shared/spaces";
 
 const fixture = `<html><head></head><body><aside><section><div data-testid="sidebar-project-workspace-list-scroll"><div id="workspace-heading"><div>Workspaces</div><div><button data-testid="sidebar-display-preferences-menu">Display preferences</button></div></div><div role="group" id="p"><button data-testid="sidebar-project-row-repo:p">P</button><span>Existing agent</span></div><div role="group" id="q"><button data-testid="sidebar-project-row-repo:q">Q</button></div><div role="group" id="unknown"><button data-testid="sidebar-project-row-other">Other host</button></div></div></section></aside><main>Chat</main><div role="menu"><div data-testid="sidebar-project-menu-open-settings-repo:p">Settings</div></div></body></html>`;
@@ -33,6 +35,8 @@ function setup(html = fixture, moveSucceeded = true, thirdSpace = false) {
       { id: "q", name: "Q", viewKey: "repo:q", workspaces: [] },
     ],
   };
+  let activity: Record<string, Activity> = {};
+  let activityPolls = 0;
   let listener = () => {},
     mutations = () => {},
     disconnected = false,
@@ -40,6 +44,10 @@ function setup(html = fixture, moveSucceeded = true, thirdSpace = false) {
   const controller = {
     get: () => snapshot,
     getLoadError: () => "",
+    getActivity: () => activity,
+    refreshActivity: async () => {
+      activityPolls++;
+    },
     subscribe(fn: () => void) {
       listener = fn;
       return () => {
@@ -89,6 +97,11 @@ function setup(html = fixture, moveSucceeded = true, thirdSpace = false) {
       snapshot = { ...snapshot, error };
       listener();
     },
+    setActivity(next: Record<string, Activity>) {
+      activity = next;
+      listener();
+    },
+    activityPolls: () => activityPolls,
     stopped: () => stopped && disconnected,
   };
 }
@@ -299,6 +312,7 @@ test("initial load failure shows Refresh without editable defaults, then restore
       }
       if (contract.name.endsWith(".read"))
         return { status: "ready", revision: "saved-revision", values: saved };
+      if (contract.name === "spaces.activity") throw new Error("Transport not connected");
       writes++;
       throw new Error("Unexpected write");
     },
@@ -437,4 +451,89 @@ test("heading follows selection, survives host rerenders, and restores on cleanu
   assert.equal(heading.textContent, "Workspaces");
   assert.equal(heading.hasAttribute("data-paseo-space-heading"), false);
   assert.equal(heading.hasAttribute("title"), false);
+});
+test("badges other Spaces by their most urgent agent and explains why", () => {
+  const f = setup(undefined, true, true),
+    d = f.document;
+  const tab = (id: string) => d.querySelector(`[data-testid="spaces-tab-${id}"]`)!;
+  const badge = (id: string) => tab(id).querySelector(".paseo-spaces-badge");
+  assert.ok(f.activityPolls() >= 1);
+  assert.equal(badge("space-2"), null);
+  f.setActivity({ p: "running" });
+  assert.equal(badge("space-2")?.getAttribute("data-activity"), "running");
+  assert.equal(tab("space-2").getAttribute("aria-label"), "Workspace 2: an agent is running");
+  assert.equal(tab("space-2").getAttribute("title"), "Workspace 2: an agent is running");
+  assert.equal(badge("space-2")?.getAttribute("aria-hidden"), "true");
+  // q lives in the current Space, so its permission stays on its visible row.
+  f.setActivity({ p: "attention", q: "needs_input" });
+  assert.equal(badge("space-1"), null);
+  assert.equal(tab("space-1").getAttribute("aria-label"), "Workspace 1");
+  assert.equal(badge("space-2")?.getAttribute("data-activity"), "attention");
+  (tab("space-2") as unknown as { click(): void }).click();
+  assert.equal(badge("space-2"), null);
+  assert.equal(badge("space-1")?.getAttribute("data-activity"), "needs_input");
+  assert.match(tab("space-1").getAttribute("aria-label")!, /needs permission/);
+  assert.equal(badge("space-3"), null);
+  f.update("Host offline");
+  assert.equal(d.querySelector(".paseo-spaces-badge"), null);
+  f.cleanup();
+});
+test("project activity folds to the most urgent status of each Space", () => {
+  let state = addSpace(addSpace(stateSchema.parse({})));
+  state = moveProject(state, projectKey("view", "repo:a"), "space-2");
+  state = moveProject(state, projectKey("sidebar", "b"), "space-2");
+  const projects = [
+    { id: "a", name: "A", viewKey: "repo:a", workspaces: [] },
+    { id: "b", name: "B", workspaces: [] },
+    { id: "c", name: "C", workspaces: [] },
+  ];
+  assert.deepEqual(spaceActivity(state, projects, { a: "running", b: "needs_input" }), {
+    "space-2": "needs_input",
+  });
+  assert.deepEqual(
+    spaceActivity(state, projects, { a: "attention", c: "failed", gone: "running" }),
+    {
+      "space-2": "attention",
+      "space-1": "failed",
+    },
+  );
+});
+test("badge palette follows the sidebar tone and polling stops on cleanup", async () => {
+  const f = setup(),
+    d = f.document;
+  const bar = () => d.querySelector('[data-testid="spaces-sidebar-controls"]')!;
+  Object.assign(d.defaultView ?? f.window, {
+    getComputedStyle: () => ({ color: "rgb(20, 20, 20)" }),
+  });
+  f.mutations();
+  await Promise.resolve();
+  assert.equal(bar().getAttribute("data-tone"), "light");
+  Object.assign(d.defaultView ?? f.window, {
+    getComputedStyle: () => ({ color: "rgb(230, 230, 230)" }),
+  });
+  f.mutations();
+  await Promise.resolve();
+  assert.equal(bar().getAttribute("data-tone"), "dark");
+  f.cleanup();
+  const intervals = new Set<unknown>();
+  const realSet = globalThis.setInterval,
+    realClear = globalThis.clearInterval;
+  globalThis.setInterval = ((fn: () => void, ms: number) => {
+    const id = realSet(fn, ms);
+    intervals.add(id);
+    return id;
+  }) as typeof setInterval;
+  globalThis.clearInterval = ((id: ReturnType<typeof setInterval>) => {
+    intervals.delete(id);
+    realClear(id);
+  }) as typeof clearInterval;
+  try {
+    const g = setup();
+    assert.equal(intervals.size, 2);
+    g.cleanup();
+    assert.equal(intervals.size, 0);
+  } finally {
+    globalThis.setInterval = realSet;
+    globalThis.clearInterval = realClear;
+  }
 });
