@@ -156,12 +156,11 @@ export function mountSidebar(
     "[data-paseo-space-heading]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}";
   // Colors mirror Paseo's statusDot theme tokens for light and dark sidebars.
   css.textContent +=
-    ".paseo-spaces-tabs button{position:relative}.paseo-spaces-tabs{padding-top:5px}" +
+    ".paseo-spaces-tabs button{position:relative}" +
     ".paseo-spaces-bar{--spaces-needs-input:#b37824;--spaces-failed:#f12e2f;--spaces-running:#268ae0;--spaces-attention:#299f51}" +
     ".paseo-spaces-bar[data-tone=dark]{--spaces-needs-input:#db932e;--spaces-failed:#f7796d;--spaces-running:#5caaf6;--spaces-attention:#35c264}" +
-    ".paseo-spaces-badge{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;pointer-events:none}" +
-    ".paseo-spaces-badge[data-activity=needs_input]{width:13px;height:13px;top:-6px;right:-6px;background:var(--spaces-needs-input);color:#fff;font:700 9px/13px system-ui;text-align:center}" +
-    ".paseo-spaces-badge[data-activity=needs_input]::before{content:'!'}" +
+    ".paseo-spaces-badge{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;pointer-events:none}" +
+    ".paseo-spaces-badge[data-activity=needs_input]{background:var(--spaces-needs-input)}" +
     ".paseo-spaces-badge[data-activity=failed]{background:var(--spaces-failed)}" +
     ".paseo-spaces-badge[data-activity=running]{background:var(--spaces-running);animation:paseo-spaces-pulse 1.4s ease-in-out infinite}" +
     ".paseo-spaces-badge[data-activity=attention]{background:var(--spaces-attention)}" +

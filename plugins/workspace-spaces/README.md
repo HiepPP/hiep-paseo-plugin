@@ -22,7 +22,7 @@ terminal. Clicking tabs also works. The main chat stays open and running agents 
 
 A tab whose Space holds a project that needs you carries a badge, so hiding a project never hides
 an agent waiting on you. It shows that Space's most urgent state, in Paseo's own order and colors:
-an amber **!** for a pending permission, a red dot for a failed agent, a pulsing blue dot while an
+an amber dot for a pending permission, a red dot for a failed agent, a pulsing blue dot while an
 agent runs, and a green dot for a finished turn not yet seen. The tab's tooltip and accessible name
 say why, for example "Workspace 2: an agent needs permission". The selected Space shows no badge:
 its rows already carry the native status. Badges come from the daemon's workspace status, polled
