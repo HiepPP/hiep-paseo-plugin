@@ -64,6 +64,12 @@ export interface DomNode {
 interface DomEvent {
   target: DomNode;
   key?: string;
+  code?: string;
+  altKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  repeat?: boolean;
+  defaultPrevented?: boolean;
   deltaX?: number;
   deltaY?: number;
   deltaMode?: number;
@@ -122,12 +128,24 @@ export function supportsSidebarInjection() {
 }
 export function installSidebar(controller: SidebarController) {
   if (!supportsSidebarInjection()) return () => {};
-  return mountSidebar(document, (callback) => new MutationObserver(callback), controller);
+  return mountSidebar(document, (callback) => new MutationObserver(callback), controller, {
+    mac: /Mac/.test(navigator.userAgent),
+  });
+}
+const EDITABLE =
+  'input,textarea,select,[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"],[role="textbox"]';
+// Paseo binds Cmd+digit and Cmd+Alt+digit on macOS, Ctrl+digit and Alt+digit elsewhere.
+function spaceShortcut(e: DomEvent, mac: boolean) {
+  const digit = /^Digit([1-9])$/.exec(e.code ?? "");
+  if (!digit || e.defaultPrevented || e.altKey || e.metaKey || !e.ctrlKey) return 0;
+  if (e.shiftKey !== !mac) return 0;
+  return e.target?.closest?.(EDITABLE) ? 0 : Number(digit[1]);
 }
 export function mountSidebar(
   doc: DomDocument,
   observe: (fn: () => void) => Observer,
   controller: SidebarController,
+  { mac = false } = {},
 ) {
   // Multiple host installations must not compete over the same app-owned sidebar.
   if (doc.querySelector(`[${OWNER}]`)) return () => {};
@@ -606,8 +624,15 @@ export function mountSidebar(
   const escape = (e: DomEvent) => {
     if (e.key === "Escape") closeActions();
   };
+  const jump = (e: DomEvent) => {
+    const space = controller.get()?.state.spaces[spaceShortcut(e, mac) - 1];
+    if (!space) return;
+    e.preventDefault();
+    if (!e.repeat) select(space.id);
+  };
   doc.addEventListener("pointerdown", dismiss);
   doc.addEventListener("keydown", escape);
+  doc.addEventListener("keydown", jump);
   doc.addEventListener("dragstart", onDrag);
   doc.addEventListener("dragend", onEnd);
   doc.addEventListener("pointerup", onEnd);
@@ -636,6 +661,7 @@ export function mountSidebar(
     for (const node of menus) node.remove();
     doc.removeEventListener("pointerdown", dismiss);
     doc.removeEventListener("keydown", escape);
+    doc.removeEventListener("keydown", jump);
     closeActions();
     bar.remove();
     for (const [heading, original] of headings) {

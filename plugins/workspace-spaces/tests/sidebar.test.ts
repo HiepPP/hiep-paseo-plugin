@@ -26,6 +26,7 @@ function setup(
   moveSucceeded = true,
   thirdSpace = false,
   storage = new Map<string, string>(),
+  mac = false,
 ) {
   const { document, window } = parseHTML(html);
   Object.assign(document.defaultView ?? window, {
@@ -98,6 +99,7 @@ function setup(
       };
     },
     controller,
+    { mac },
   );
   return {
     document,
@@ -588,4 +590,59 @@ test("selected Space survives a reload and falls back to the first when it was r
   ).click();
   assert.equal(selected(broken.document), "2");
   broken.cleanup();
+});
+test("Ctrl+digit on macOS and Ctrl+Shift+digit elsewhere jump to Space N outside text fields", () => {
+  const html = fixture.replace(
+    "<main>Chat</main>",
+    '<main>Chat<textarea></textarea><div contenteditable="true"></div></main>',
+  );
+  const selected = (d: { querySelector(s: string): unknown }) =>
+    (d.querySelector('[role="tab"][aria-selected="true"]') as { textContent: string }).textContent;
+  const press = (
+    f: ReturnType<typeof setup>,
+    target: { dispatchEvent(e: Event): boolean },
+    keys: Record<string, unknown>,
+  ) => {
+    const event = new f.window.Event("keydown", { bubbles: true, cancelable: true });
+    Object.assign(event, {
+      ctrlKey: false,
+      shiftKey: false,
+      altKey: false,
+      metaKey: false,
+      ...keys,
+    });
+    target.dispatchEvent(event as unknown as Event);
+    return event.defaultPrevented;
+  };
+  const mac = setup(html, true, true, new Map(), true);
+  const body = mac.document.body as unknown as { dispatchEvent(e: Event): boolean };
+  assert.equal(press(mac, body, { code: "Digit3", key: "3", ctrlKey: true }), true);
+  assert.equal(selected(mac.document), "3");
+  // Native bindings keep their keys: Cmd+digit, Cmd+Alt+digit, and digits beyond the last Space.
+  assert.equal(press(mac, body, { code: "Digit1", metaKey: true }), false);
+  assert.equal(press(mac, body, { code: "Digit1", metaKey: true, altKey: true }), false);
+  assert.equal(press(mac, body, { code: "Digit1", ctrlKey: true, shiftKey: true }), false);
+  assert.equal(press(mac, body, { code: "Digit4", ctrlKey: true }), false);
+  assert.equal(selected(mac.document), "3");
+  for (const field of ["textarea", '[contenteditable="true"]'])
+    assert.equal(
+      press(mac, mac.document.querySelector(field) as unknown as typeof body, {
+        code: "Digit1",
+        ctrlKey: true,
+      }),
+      false,
+    );
+  assert.equal(selected(mac.document), "3");
+  mac.cleanup();
+  assert.equal(press(mac, body, { code: "Digit1", ctrlKey: true }), false);
+  const other = setup(html, true, true);
+  const otherBody = other.document.body as unknown as typeof body;
+  assert.equal(press(other, otherBody, { code: "Digit2", key: "2", ctrlKey: true }), false);
+  assert.equal(selected(other.document), "1");
+  assert.equal(
+    press(other, otherBody, { code: "Digit2", key: "@", ctrlKey: true, shiftKey: true }),
+    true,
+  );
+  assert.equal(selected(other.document), "2");
+  other.cleanup();
 });

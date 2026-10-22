@@ -15,7 +15,10 @@ The same tab menu (also opened with Delete) lets you remove that Space.
 Its projects move atomically to the preceding Space, or the next one when removing the first.
 For example, removing Space 2 moves its projects to Space 1.
 The last Space cannot be removed. A failed save preserves both the Space and its memberships.
-Clicking tabs also works. The main chat stays open and running agents are untouched.
+Press **Ctrl+1** to **Ctrl+9** on macOS, or **Ctrl+Shift+1** to **Ctrl+Shift+9** on Windows and
+Linux, to jump to Space 1 to 9. These keys avoid Paseo's own bindings (Cmd+digit and Cmd+Alt+digit
+on macOS, Ctrl+digit and Alt+digit elsewhere) and are ignored while typing in a text field or a
+terminal. Clicking tabs also works. The main chat stays open and running agents are untouched.
 
 A tab whose Space holds a project that needs you carries a badge, so hiding a project never hides
 an agent waiting on you. It shows that Space's most urgent state, in Paseo's own order and colors:
@@ -47,7 +50,7 @@ Existing native sidebar filters still apply; Spaces do not reveal rows the app a
 Native keyboard shortcuts, search, and history retain their normal global behavior.
 
 A MutationObserver restores controls when the sidebar rerenders. Disabling removes the observer,
-refresh and activity timers, wheel listener, injected menus, styles, visibility attributes, and footer controls.
+refresh and activity timers, wheel and keyboard listeners, injected menus, styles, visibility attributes, and footer controls.
 Switching Spaces slides the project list out and the destination list in over 170 ms, following the direction
 of travel. The numbered controls stay fixed. Reduced-motion preferences skip the animation.
 Disabling cancels any active animation. Real trackpad hardware remains a manual acceptance check.
@@ -68,7 +71,7 @@ paseo plugin logs workspace-spaces
 
 DOM tests cover activity badges and their labels, scoped wheel events, project filtering, rerenders, errors, menu extension,
 success-only menu dismissal, Space removal, last-Space protection, and cleanup.
-DOM tests also cover restoring the selected Space after reload. State tests cover stable identities, invalid settings, pagination, revision conflicts, gesture boundaries,
+DOM tests also cover restoring the selected Space after reload and the Space shortcuts. State tests cover stable identities, invalid settings, pagination, revision conflicts, gesture boundaries,
 and project reassignment when removing a Space.
 Live desktop checks cover project moves, filtered tabs, and restoring the original sidebar on disable.
 
