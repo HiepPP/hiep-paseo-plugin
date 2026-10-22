@@ -72,7 +72,10 @@ interface DomEvent {
   preventDefault(): void;
 }
 export interface DomDocument extends DomNode {
-  defaultView?: { matchMedia?(query: string): { matches: boolean } };
+  defaultView?: {
+    matchMedia?(query: string): { matches: boolean };
+    getComputedStyle?(node: DomNode): { color: string };
+  };
   createEvent(
     type: string,
   ): DomEvent & { initEvent(type: string, bubbles: boolean, cancelable: boolean): void };
@@ -89,6 +92,13 @@ declare const navigator: { userAgent: string };
 declare const MutationObserver: new (callback: () => void) => Observer;
 const OWNER = "data-paseo-spaces-owner";
 const HIDDEN = "data-paseo-space-hidden";
+
+// React Native Web sets color on Text only, so `color: inherit` falls back to the page's black.
+function adoptTextColor(doc: DomDocument, target: DomNode, source: DomNode | null) {
+  const text = source?.querySelector('[dir="auto"]') ?? source;
+  const color = text ? doc.defaultView?.getComputedStyle?.(text).color : undefined;
+  if (color) target.style.setProperty("color", color);
+}
 
 export function supportsSidebarInjection() {
   return (
@@ -288,6 +298,11 @@ export function mountSidebar(
         unbindWheel = () => target.removeEventListener("wheel", listener);
       }
     }
+    adoptTextColor(
+      doc,
+      bar,
+      scroll?.querySelector('[data-testid^="sidebar-project-row-"]') ?? null,
+    );
     if (!snap) {
       const message = controller.getLoadError();
       if (message && signature !== message) {
@@ -456,6 +471,7 @@ export function mountSidebar(
         (marker.closest('[data-menu-surface="true"]') ? marker.parentElement : null);
       if (!menu) continue;
       let own = menu.querySelector(".paseo-spaces-menu");
+      if (own) adoptTextColor(doc, own, marker);
       const menuStamp = JSON.stringify([
         key,
         snap.state.spaces,
@@ -468,6 +484,7 @@ export function mountSidebar(
         own.setAttribute("class", "paseo-spaces-menu");
         menu.appendChild(own);
         menus.add(own);
+        adoptTextColor(doc, own, marker);
       }
       own.setAttribute("data-state", menuStamp);
       own.textContent = "";
