@@ -36,7 +36,8 @@ Browser and native mobile clients keep the standalone Spaces page as a fallback.
 Project view IDs group rows across connected hosts, including equivalent projects.
 Settings belong to the daemon where this plugin is installed, with revision-checked atomic saves.
 Install on one host per desktop: the first active adapter owns the shared sidebar and others do not
-compete. Space selection resets to the first remaining Space on reload. Project membership survives reload,
+compete. The selected Space survives reload; it is stored by this desktop app, not in
+the host settings, and falls back to the first Space when it was removed meanwhile. Project membership survives reload,
 disable, and updates. Removing the registration deletes its settings.
 New project groups default to the first remaining Space. Project rows with unrecognized DOM structure are left
 visible. Settings/catalog errors reveal hidden groups instead of leaving projects inaccessible.
@@ -67,7 +68,7 @@ paseo plugin logs workspace-spaces
 
 DOM tests cover activity badges and their labels, scoped wheel events, project filtering, rerenders, errors, menu extension,
 success-only menu dismissal, Space removal, last-Space protection, and cleanup.
-State tests cover stable identities, invalid settings, pagination, revision conflicts, gesture boundaries,
+DOM tests also cover restoring the selected Space after reload. State tests cover stable identities, invalid settings, pagination, revision conflicts, gesture boundaries,
 and project reassignment when removing a Space.
 Live desktop checks cover project moves, filtered tabs, and restoring the original sidebar on disable.
 

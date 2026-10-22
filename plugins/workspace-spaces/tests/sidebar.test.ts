@@ -21,8 +21,19 @@ import {
 } from "../shared/spaces";
 
 const fixture = `<html><head></head><body><aside><section><div data-testid="sidebar-project-workspace-list-scroll"><div id="workspace-heading"><div>Workspaces</div><div><button data-testid="sidebar-display-preferences-menu">Display preferences</button></div></div><div role="group" id="p"><button data-testid="sidebar-project-row-repo:p">P</button><span>Existing agent</span></div><div role="group" id="q"><button data-testid="sidebar-project-row-repo:q">Q</button></div><div role="group" id="unknown"><button data-testid="sidebar-project-row-other">Other host</button></div></div></section></aside><main>Chat</main><div role="menu"><div data-testid="sidebar-project-menu-open-settings-repo:p">Settings</div></div></body></html>`;
-function setup(html = fixture, moveSucceeded = true, thirdSpace = false) {
+function setup(
+  html = fixture,
+  moveSucceeded = true,
+  thirdSpace = false,
+  storage = new Map<string, string>(),
+) {
   const { document, window } = parseHTML(html);
+  Object.assign(document.defaultView ?? window, {
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    },
+  });
   let state = addSpace(stateSchema.parse({}));
   if (thirdSpace) state = addSpace(state);
   state = moveProject(state, projectKey("sidebar", "p"), "space-2");
@@ -536,4 +547,45 @@ test("badge palette follows the sidebar tone and polling stops on cleanup", asyn
     globalThis.setInterval = realSet;
     globalThis.clearInterval = realClear;
   }
+});
+test("selected Space survives a reload and falls back to the first when it was removed", () => {
+  const storage = new Map<string, string>();
+  const selected = (d: { querySelector(s: string): unknown }) =>
+    (d.querySelector('[role="tab"][aria-selected="true"]') as { textContent: string }).textContent;
+  const first = setup(undefined, true, true, storage);
+  (
+    first.document.querySelector('[data-testid="spaces-tab-space-3"]') as unknown as {
+      click(): void;
+    }
+  ).click();
+  first.cleanup();
+  assert.equal(storage.get("paseo-workspace-spaces:selected"), "space-3");
+  const reloaded = setup(undefined, true, true, storage);
+  assert.equal(selected(reloaded.document), "3");
+  assert.equal(
+    reloaded.document.querySelector("#q")?.getAttribute("data-paseo-space-hidden"),
+    "true",
+  );
+  reloaded.cleanup();
+  storage.set("paseo-workspace-spaces:selected", "space-9");
+  const removed = setup(undefined, true, true, storage);
+  assert.equal(selected(removed.document), "1");
+  assert.equal(storage.get("paseo-workspace-spaces:selected"), "space-9");
+  removed.cleanup();
+  const broken = setup(undefined, true, true, {
+    get: () => {
+      throw new Error("denied");
+    },
+    set: () => {
+      throw new Error("denied");
+    },
+  } as unknown as Map<string, string>);
+  assert.equal(selected(broken.document), "1");
+  (
+    broken.document.querySelector('[data-testid="spaces-tab-space-2"]') as unknown as {
+      click(): void;
+    }
+  ).click();
+  assert.equal(selected(broken.document), "2");
+  broken.cleanup();
 });

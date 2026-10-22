@@ -74,6 +74,10 @@ interface DomEvent {
 export interface DomDocument extends DomNode {
   visibilityState?: string;
   defaultView?: {
+    localStorage?: {
+      getItem(key: string): string | null;
+      setItem(key: string, value: string): void;
+    };
     matchMedia?(query: string): { matches: boolean };
     getComputedStyle?(node: DomNode): { color: string };
   };
@@ -93,6 +97,8 @@ declare const navigator: { userAgent: string };
 declare const MutationObserver: new (callback: () => void) => Observer;
 const OWNER = "data-paseo-spaces-owner";
 const HIDDEN = "data-paseo-space-hidden";
+// Selection is per window, so it lives with the app rather than in the host's shared settings.
+const SELECTED = "paseo-workspace-spaces:selected";
 
 // React Native Web sets color on Text only, so `color: inherit` falls back to the page's black.
 function adoptTextColor(doc: DomDocument, target: DomNode, source: DomNode | null) {
@@ -197,7 +203,23 @@ export function mountSidebar(
     stopped = false,
     scheduled = false,
     signature = "",
-    dragging = false;
+    dragging = false,
+    restored = false;
+  function setActive(id: string) {
+    active = id;
+    try {
+      doc.defaultView?.localStorage?.setItem(SELECTED, id);
+    } catch {
+      /* Storage can be unavailable; selection then lasts for this session only. */
+    }
+  }
+  function storedSelection() {
+    try {
+      return doc.defaultView?.localStorage?.getItem(SELECTED) ?? null;
+    } catch {
+      return null;
+    }
+  }
   let previousOrder: string[] = [];
   let unbindWheel = () => {};
   function hide(node: DomNode, value: boolean) {
@@ -240,7 +262,7 @@ export function mountSidebar(
         : -1;
     const node = scroll;
     const apply = () => {
-      active = id;
+      setActive(id);
       signature = "";
       render();
     };
@@ -336,11 +358,17 @@ export function mountSidebar(
       }
       return;
     }
+    if (!restored) {
+      restored = true;
+      const stored = storedSelection();
+      if (stored && snap.state.spaces.some((s) => s.id === stored)) active = stored;
+    }
     if (!snap.state.spaces.some((s) => s.id === active)) {
       const previous = previousOrder.slice(0, previousOrder.indexOf(active)).reverse();
-      active =
+      setActive(
         previous.find((id) => snap.state.spaces.some((s) => s.id === id)) ??
-        snap.state.spaces[0].id;
+          snap.state.spaces[0].id,
+      );
     }
     updateHeading(snap.error ? null : snap.state.spaces.find((space) => space.id === active)!.name);
     previousOrder = snap.state.spaces.map((s) => s.id);
