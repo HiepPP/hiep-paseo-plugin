@@ -72,7 +72,10 @@ interface DomEvent {
   preventDefault(): void;
 }
 export interface DomDocument extends DomNode {
-  defaultView?: { matchMedia?(query: string): { matches: boolean } };
+  defaultView?: {
+    matchMedia?(query: string): { matches: boolean };
+    getComputedStyle?(node: DomNode): { color: string };
+  };
   createEvent(
     type: string,
   ): DomEvent & { initEvent(type: string, bubbles: boolean, cancelable: boolean): void };
@@ -112,7 +115,8 @@ export function mountSidebar(
   css.setAttribute(OWNER, "true");
   css.textContent = `[${HIDDEN}]{display:none!important}.paseo-spaces-bar{flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;gap:0;border-top:1px solid #8883;font:13px system-ui;color:inherit}.paseo-spaces-tabs{display:flex;gap:4px;overflow-x:auto;padding:2px}.paseo-spaces-bar [role=status]:empty{display:none}.paseo-spaces-bar .paseo-spaces-tabs button{min-width:26px;height:26px;padding:0 7px;border-radius:6px;font-size:12px;line-height:24px}.paseo-spaces-bar button,.paseo-spaces-menu button{font:inherit;color:inherit;background:transparent;border:1px solid #8883;border-radius:8px;padding:8px 12px;cursor:pointer;flex-shrink:0}.paseo-spaces-bar button[aria-selected=true]{background:#7660de;color:white;border-color:transparent}.paseo-spaces-bar button:focus-visible,.paseo-spaces-menu button:focus-visible{outline:2px solid #7660de;outline-offset:2px}.paseo-spaces-menu{display:flex;flex-direction:column;gap:2px;border-top:1px solid #8883;margin-top:4px;padding:6px 4px 2px;font:12px/1.3 system-ui;color:inherit}.paseo-spaces-menu>div{padding:2px 8px 5px;font-size:10px;font-weight:500;opacity:.6}.paseo-spaces-menu button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:28px;padding:5px 8px;border:0;border-radius:5px;text-align:left;font:inherit;line-height:18px}.paseo-spaces-menu button:hover:not(:disabled){background:#8882}.paseo-spaces-menu button[aria-checked=true]{background:#7660de14;font-weight:500}.paseo-spaces-menu button[aria-checked=true]::after{content:"✓";font-size:12px;color:#8b79df}.paseo-spaces-bar button:disabled,.paseo-spaces-menu button:disabled{opacity:.5;cursor:default}`;
   css.textContent +=
-    "[data-paseo-space-heading]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}";
+    "[data-paseo-space-heading]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}" +
+    ".paseo-spaces-name{flex:1 1 auto;min-width:0;align-self:center;padding-left:6px;font-size:12px;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}";
   doc.head.appendChild(css);
   const bar = doc.createElement("div");
   bar.setAttribute("class", "paseo-spaces-bar");
@@ -133,6 +137,18 @@ export function mountSidebar(
     actions.remove();
     actions.textContent = "";
   };
+  // The host colours text inline per theme, so borrow a project row's colour instead of inheriting the default.
+  function textColor(source: DomNode) {
+    const leaf = Array.from(source.querySelectorAll("*")).find(
+      (n) => !n.querySelector("*") && n.textContent?.trim(),
+    );
+    return doc.defaultView?.getComputedStyle?.(leaf ?? source)?.color;
+  }
+  function matchTextColor() {
+    const row = scroll?.querySelector('[data-testid^="sidebar-project-row-"]');
+    const color = row && textColor(row);
+    if (color) bar.style.setProperty("color", color);
+  }
   const headings = new Map<DomNode, { text: string; title: string | null }>();
   function updateHeading(name: string | null) {
     const marker = scroll?.querySelector('[data-testid="sidebar-display-preferences-menu"]');
@@ -306,6 +322,7 @@ export function mountSidebar(
         previous.find((id) => snap.state.spaces.some((s) => s.id === id)) ??
         snap.state.spaces[0].id;
     }
+    matchTextColor();
     updateHeading(snap.error ? null : snap.state.spaces.find((space) => space.id === active)!.name);
     previousOrder = snap.state.spaces.map((s) => s.id);
     const stamp = JSON.stringify([active, snap.state.spaces, snap.busy, snap.error]);
@@ -412,6 +429,10 @@ export function mountSidebar(
       );
       add.setAttribute("aria-label", "Create Space");
       add.setAttribute("title", "Create Space");
+      const label = doc.createElement("span");
+      label.setAttribute("class", "paseo-spaces-name");
+      label.textContent = snap.state.spaces.find((space) => space.id === active)?.name ?? "";
+      tabs.appendChild(label);
       if (snap.error)
         button(tabs, "Refresh", () => {
           void controller.refresh();
@@ -456,19 +477,22 @@ export function mountSidebar(
         (marker.closest('[data-menu-surface="true"]') ? marker.parentElement : null);
       if (!menu) continue;
       let own = menu.querySelector(".paseo-spaces-menu");
-      const menuStamp = JSON.stringify([
-        key,
-        snap.state.spaces,
-        viewMembership(snap.state, key, project),
-        snap.busy,
-      ]);
-      if (own?.getAttribute("data-state") === menuStamp) continue;
       if (!own) {
         own = doc.createElement("div");
         own.setAttribute("class", "paseo-spaces-menu");
         menu.appendChild(own);
         menus.add(own);
       }
+      // The host menu also colours its items inline, so match its own text.
+      const menuColor = textColor(marker);
+      if (menuColor) own.style.setProperty("color", menuColor);
+      const menuStamp = JSON.stringify([
+        key,
+        snap.state.spaces,
+        viewMembership(snap.state, key, project),
+        snap.busy,
+      ]);
+      if (own.getAttribute("data-state") === menuStamp) continue;
       own.setAttribute("data-state", menuStamp);
       own.textContent = "";
       const heading = doc.createElement("div");

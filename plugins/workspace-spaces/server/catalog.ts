@@ -1,4 +1,8 @@
-import type { PaseoApi } from "@getpaseo/client";
+import type { PluginHandlerContext } from "@getpaseo/plugin/server";
+
+// The daemon build can't resolve "@getpaseo/client"; the SDK context carries the same API.
+type PaseoApi = PluginHandlerContext["paseo"];
+
 export async function loadCatalog(paseo: Pick<PaseoApi, "projects" | "workspaces">) {
   const { projects } = await paseo.projects.list();
   const rows = new Map(
