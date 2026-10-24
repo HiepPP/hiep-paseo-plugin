@@ -138,13 +138,15 @@ export function mountSidebar(
     actions.textContent = "";
   };
   // The host colours text inline per theme, so borrow a project row's colour instead of inheriting the default.
-  function matchTextColor() {
-    const row = scroll?.querySelector('[data-testid^="sidebar-project-row-"]');
-    if (!row) return;
-    const leaf = Array.from(row.querySelectorAll("*")).find(
+  function textColor(source: DomNode) {
+    const leaf = Array.from(source.querySelectorAll("*")).find(
       (n) => !n.querySelector("*") && n.textContent?.trim(),
     );
-    const color = doc.defaultView?.getComputedStyle?.(leaf ?? row)?.color;
+    return doc.defaultView?.getComputedStyle?.(leaf ?? source)?.color;
+  }
+  function matchTextColor() {
+    const row = scroll?.querySelector('[data-testid^="sidebar-project-row-"]');
+    const color = row && textColor(row);
     if (color) bar.style.setProperty("color", color);
   }
   const headings = new Map<DomNode, { text: string; title: string | null }>();
@@ -475,19 +477,22 @@ export function mountSidebar(
         (marker.closest('[data-menu-surface="true"]') ? marker.parentElement : null);
       if (!menu) continue;
       let own = menu.querySelector(".paseo-spaces-menu");
-      const menuStamp = JSON.stringify([
-        key,
-        snap.state.spaces,
-        viewMembership(snap.state, key, project),
-        snap.busy,
-      ]);
-      if (own?.getAttribute("data-state") === menuStamp) continue;
       if (!own) {
         own = doc.createElement("div");
         own.setAttribute("class", "paseo-spaces-menu");
         menu.appendChild(own);
         menus.add(own);
       }
+      // The host menu also colours its items inline, so match its own text.
+      const menuColor = textColor(marker);
+      if (menuColor) own.style.setProperty("color", menuColor);
+      const menuStamp = JSON.stringify([
+        key,
+        snap.state.spaces,
+        viewMembership(snap.state, key, project),
+        snap.busy,
+      ]);
+      if (own.getAttribute("data-state") === menuStamp) continue;
       own.setAttribute("data-state", menuStamp);
       own.textContent = "";
       const heading = doc.createElement("div");

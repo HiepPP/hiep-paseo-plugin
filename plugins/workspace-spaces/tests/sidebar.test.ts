@@ -456,3 +456,17 @@ test("strip shows the selected Space name and takes the sidebar's text colour", 
   assert.equal(bar.style.getPropertyValue("color"), "rgb(230, 230, 230)");
   f.cleanup();
 });
+test("project menu section takes the host menu's text colour", async () => {
+  const f = setup(),
+    d = f.document;
+  Object.assign(d.defaultView ?? f.window, {
+    getComputedStyle: () => ({ color: "rgb(240, 240, 240)" }),
+  });
+  f.mutations();
+  await Promise.resolve();
+  const own = d.querySelector(".paseo-spaces-menu") as unknown as {
+    style: { getPropertyValue(n: string): string };
+  };
+  assert.equal(own.style.getPropertyValue("color"), "rgb(240, 240, 240)");
+  f.cleanup();
+});
