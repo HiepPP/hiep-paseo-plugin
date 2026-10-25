@@ -195,3 +195,21 @@ test("renaming trims names and preserves identities and membership", () => {
   assert.throws(() => renameSpace(state, "space-2", " \n "), /Enter a workspace name/);
   assert.throws(() => renameSpace(state, "missing", "Work"), /no longer exists/);
 });
+
+test("the Spaces page reads and writes the desktop sidebar's view keys", async () => {
+  const { moveCatalogProject, projectMembership } = await import("../client/sidebar-state");
+  const state = stateSchema.parse({
+    spaces: [
+      { id: "space-1", name: "A" },
+      { id: "space-2", name: "B" },
+    ],
+    members: { [projectKey("view", "remote:github.com/o/r")]: "space-2" },
+  });
+  const project = { id: "prj_1", name: "r", viewKey: "remote:github.com/o/r", workspaces: [] };
+  assert.equal(projectMembership(state, project), "space-2");
+  const moved = moveCatalogProject(state, project, "space-1");
+  assert.equal(projectMembership(moved, project), "space-1");
+  assert.equal(moved.members[projectKey("view", "remote:github.com/o/r")], "space-1");
+  const bare = { id: "prj_2", name: "s", workspaces: [] };
+  assert.equal(projectMembership(moveCatalogProject(state, bare, "space-2"), bare), "space-2");
+});

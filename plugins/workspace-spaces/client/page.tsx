@@ -3,16 +3,8 @@ import { PanResponder, Pressable, ScrollView, Text, TextInput, View } from "reac
 import { useRpc, useSettings, type PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { SettingsSelect } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
-import {
-  addSpace,
-  adjacent,
-  catalogRpc,
-  membership,
-  moveProject,
-  preferences,
-  projectKey,
-  renameSpace,
-} from "../shared/spaces";
+import { addSpace, adjacent, catalogRpc, preferences, renameSpace } from "../shared/spaces";
+import { moveCatalogProject, projectMembership } from "./sidebar-state";
 import { bindWheel } from "./web";
 import { touchDirection } from "./gesture";
 
@@ -110,14 +102,15 @@ function HostPage({ host, theme, navigation, layout }: PluginSurfaceProps) {
   }
   async function move(projectId: string, target: string) {
     if (settings.status !== "ready" || pending.current) return;
-    if (!catalog.data?.projects.some((p) => p.id === projectId)) {
+    const project = catalog.data?.projects.find((p) => p.id === projectId);
+    if (!project) {
       setNotice("Project unavailable. Refresh and try again.");
       return;
     }
     pending.current = true;
     setBusy(true);
     try {
-      const next = moveProject(settings.values, projectKey(host.id, projectId), target);
+      const next = moveCatalogProject(settings.values, project, target);
       if (await settings.save(next, settings.revision)) {
         setMoving(null);
         setNotice("Project moved.");
@@ -134,9 +127,7 @@ function HostPage({ host, theme, navigation, layout }: PluginSurfaceProps) {
     void catalog.refetch();
   };
   const projects =
-    catalog.data?.projects.filter(
-      (p) => values && membership(values, projectKey(host.id, p.id)) === selected,
-    ) ?? [];
+    catalog.data?.projects.filter((p) => values && projectMembership(values, p) === selected) ?? [];
   return (
     <View
       style={{
