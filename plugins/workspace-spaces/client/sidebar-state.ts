@@ -44,6 +44,14 @@ export function viewMembership(state: SpacesState, key: string, project?: Sideba
       ? sidebarMembership(state, project.id)
       : state.spaces[0].id;
 }
+export const projectMembership = (state: SpacesState, project: SidebarProject) =>
+  viewMembership(state, project.viewKey ?? "", project);
+// Write the same keys the desktop sidebar reads, or a page move is invisible there.
+export function moveCatalogProject(state: SpacesState, project: SidebarProject, target: string) {
+  const next = moveProject(state, projectKey("sidebar", project.id), target);
+  if (project.viewKey) next.members[projectKey("view", project.viewKey)] = target;
+  return next;
+}
 export function matchProject(key: string, projects: SidebarProject[]) {
   const equivalent = projects.find((p) => p.viewKey === key);
   if (equivalent) return equivalent;
